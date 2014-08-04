@@ -29,7 +29,6 @@ int main(int argc, char *argv[])
     viewer->setSource(QStringLiteral("qrc:main.qml"));
     viewer->show();
 
-    //Flyggi* fly = new Flyggi;
     QObject::connect(Flyggi::instance(), SIGNAL(ggiReady(const QString&)), imageProvider, SLOT(slotNewFrameReady()));
 
     //QTimer timer;
@@ -40,6 +39,7 @@ int main(int argc, char *argv[])
     //timer.setInterval(100);
     //timer.setSingleShot(false);
     //timer.start();
+
     QThread workerThread;
     Flyggi::instance()->moveToThread( &workerThread );
     workerThread.start();
