@@ -1744,18 +1744,18 @@ render_update(void)
 
 	ggiFlush(g.stem);
 
-	if (d_frame == w_frame)
-		return;
+	if (d_frame != w_frame)
+        {
+	    ggiSetWriteFrame(g.stem, d_frame);
+	    ggiCopyBox(g.stem,
+	    	g.offset.x, g.offset.y,
+	    	g.width, g.height,
+	    	g.offset.x, g.offset.y);
+	    ggiSetReadFrame(g.stem, d_frame);
 
-	ggiSetWriteFrame(g.stem, d_frame);
-	ggiCopyBox(g.stem,
-		g.offset.x, g.offset.y,
-		g.width, g.height,
-		g.offset.x, g.offset.y);
-	ggiSetReadFrame(g.stem, d_frame);
-
-	if (g.post_flush_hook)
-		g.post_flush_hook(g.flush_hook_data);
+	    if (g.post_flush_hook)
+	    	g.post_flush_hook(g.flush_hook_data);
+        }
 
         qDebug() << "update_frame";
         int numbufs = ggiDBGetNumBuffers( g.stem );
