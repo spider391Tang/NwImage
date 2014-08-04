@@ -13,12 +13,14 @@
 #include <QtQuick/QQuickView>
 #include <QThread>
 #include <QDebug>
+#include "flyggi.h"
 
+
+extern int ggi_main(int argc, char **argv);
 
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
-    QTimer timer;
     NwImageProvider *imageProvider = new NwImageProvider;
 
     QQuickView *viewer = new QQuickView();
@@ -27,10 +29,22 @@ int main(int argc, char *argv[])
     viewer->setSource(QStringLiteral("qrc:main.qml"));
     viewer->show();
 
-    QObject::connect(&timer, SIGNAL(timeout()), imageProvider, SLOT(slotNewFrameReady()));
-    timer.setInterval(100);
-    timer.setSingleShot(false);
-    timer.start();
+    //Flyggi* fly = new Flyggi;
+    QObject::connect(Flyggi::instance(), SIGNAL(ggiReady(const QString&)), imageProvider, SLOT(slotNewFrameReady()));
+
+    //QTimer timer;
+    //QObject::connect(&timer, SIGNAL(timeout()), fly, SLOT(startFly()));
+    //timer.start( 1000 );
+    QTimer::singleShot( 1000, Flyggi::instance(), SLOT(startFly()));
+
+    //timer.setInterval(100);
+    //timer.setSingleShot(false);
+    //timer.start();
+    QThread workerThread;
+    Flyggi::instance()->moveToThread( &workerThread );
+    workerThread.start();
+
+    // ggi_main( argc, argv );
 
     return app.exec();
 }
