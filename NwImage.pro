@@ -2,6 +2,8 @@ TEMPLATE = app
 
 QT += qml quick widgets
 
+CONFIG += c++11
+
 SOURCES += main.cpp \
     nwimageprovider.cpp \
     flying_ggi.cpp \
@@ -22,7 +24,9 @@ SOURCES += main.cpp \
     ggivnc/conn_none.c \
     ggivnc/d3des.c \
     ggivnc/pass_getpass.c \
-    ggivnc/vnc.cpp
+    ggivnc/vnc.cpp \
+    MLVNC.cpp \
+    MLLibraryBase.cpp
 
 
 RESOURCES += qml.qrc
@@ -38,7 +42,9 @@ HEADERS += \
     flyggi.h \
     ggivnc/config.h \
     ggivnc/d3des.h \
-    ggivnc/vnc.h
+    ggivnc/vnc.h \
+    MLVNC.h \
+    MLLibraryBase.h
 
 macx: LIBS += -L$$PWD/../ggi-2.2.2-bundle/ggiconf/lib/ -lgg -lgii -lggi -lz
 
