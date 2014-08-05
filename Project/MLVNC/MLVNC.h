@@ -14,6 +14,9 @@
 #include <functional>
 #include <string>
 
+#include "../ggivnc/config.h"
+#include "../ggivnc/vnc.h"
+
 namespace MLLibrary {
 
 class MLVNC: virtual public MLLibraryBase {
@@ -51,6 +54,7 @@ private:
 
     //! callback variable for register_vnc_events to report vnc event ids
     std::function<void(int)> mVNCEventCb;
+    struct globals mGgivnc;
 };
 
 } /* End of namespace MLLibrary */

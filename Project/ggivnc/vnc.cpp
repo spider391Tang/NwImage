@@ -113,7 +113,7 @@ extern "C" {
 
 #include <QDebug>
 #include <QImage>
-#include "flyggi.h"
+// #include "flyggi.h"
 
 struct globals g;
 
@@ -1757,26 +1757,27 @@ render_update(void)
 	    	g.post_flush_hook(g.flush_hook_data);
         }
 
-        qDebug() << "update_frame";
-        int numbufs = ggiDBGetNumBuffers( g.stem );
-        qDebug() << "Number of memory buffers = " << numbufs;
-        const ggi_directbuffer *db;
-        db = ggiDBGetBuffer( g.stem, 0 );
-        if( !db->type & GGI_DB_SIMPLE_PLB )
-        {
-            qDebug() << "We don't handle anything but simple pixel-linear buffer";
-        }
-        int frameno = db->frame;
-        int ggiStride = db->buffer.plb.stride;
-        printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
-        qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
-        // memcpy( ptr, db->read, ggiStride * 1080 );
-        // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
-        // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
-        QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
+        //qDebug() << "update_frame";
+        //int numbufs = ggiDBGetNumBuffers( g.stem );
+        //qDebug() << "Number of memory buffers = " << numbufs;
+        //const ggi_directbuffer *db;
+        //db = ggiDBGetBuffer( g.stem, 0 );
+        //if( !db->type & GGI_DB_SIMPLE_PLB )
+        //{
+        //    qDebug() << "We don't handle anything but simple pixel-linear buffer";
+        //}
+        //int frameno = db->frame;
+        //int ggiStride = db->buffer.plb.stride;
+        //printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
+        //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
+        //// memcpy( ptr, db->read, ggiStride * 1080 );
+        //// ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
+        //// Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
+        //QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
 
-        Flyggi::instance()->assignImage( img );
-        Flyggi::instance()->ggiReady("hello");
+        //Flyggi::instance()->assignImage( img );
+        //Flyggi::instance()->ggiReady("hello");
+
 }
 
 static int

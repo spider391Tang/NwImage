@@ -1,8 +1,10 @@
 #include "flyggi.h"
 #include <QDebug>
 
+
 extern int ggi_main(int argc, char **argv);
 extern int ggivnc_main(int argc, char **argv);
+extern int foo();
 
 // ggivnc_main(int argc, char * const argv[])
 
@@ -19,6 +21,7 @@ void Flyggi::startFly()
     char* aa[] = {"ggivnc","10.128.60.135"};
     ggivnc_main( 2, aa);
     //ggi_main( 2, aa);
+    foo();
 }
 
 void Flyggi::emitFly( const QByteArray& data )

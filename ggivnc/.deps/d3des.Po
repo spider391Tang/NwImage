@@ -1,3 +1,0 @@
-src/d3des.o: src/d3des.c src/d3des.h
-
-src/d3des.h:
