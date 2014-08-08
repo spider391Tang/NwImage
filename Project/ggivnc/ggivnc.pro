@@ -15,8 +15,7 @@ SOURCES += encoding/copyrect.c \
     bandwidth.c \
     conn_none.c \
     d3des.c \
-    pass_getpass.c \
-    vnc.cpp
+    pass_getpass.c
 
 HEADERS += config.h \
     d3des.h \

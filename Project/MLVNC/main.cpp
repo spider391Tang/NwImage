@@ -16,6 +16,13 @@
 #include "flyggi.h"
 
 
+void foo( char a )
+{
+
+    printf("%s",a);
+
+}
+
 extern int ggi_main(int argc, char **argv);
 
 int main(int argc, char *argv[])

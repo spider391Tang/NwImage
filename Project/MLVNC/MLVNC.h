@@ -51,6 +51,9 @@ public:
     void register_vnc_events(std::function<void(int)>);
 
 private:
+    int parse_encodings(char *encstr);
+    int parse_listen(const char *display);
+private:
 
     //! callback variable for register_vnc_events to report vnc event ids
     std::function<void(int)> mVNCEventCb;

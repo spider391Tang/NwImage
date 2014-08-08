@@ -1,6 +1,6 @@
 #include "flyggi.h"
 #include <QDebug>
-
+#include "MLVNC.h"
 
 extern int ggi_main(int argc, char **argv);
 extern int ggivnc_main(int argc, char **argv);
@@ -19,6 +19,8 @@ void Flyggi::startFly()
 {
     qDebug() << "startFly";
     char* aa[] = {"ggivnc","10.128.60.135"};
+    // MLLibrary::MLVNC* vnc = new MLLibrary::MLVNC;
+    // set environment
     ggivnc_main( 2, aa);
     //ggi_main( 2, aa);
     foo();
