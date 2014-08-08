@@ -23,7 +23,7 @@ void Flyggi::startFly()
     // set environment
     ggivnc_main( 2, aa);
     //ggi_main( 2, aa);
-    foo();
+    //foo();
 }
 
 void Flyggi::emitFly( const QByteArray& data )

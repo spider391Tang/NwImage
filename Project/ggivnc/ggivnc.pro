@@ -15,7 +15,8 @@ SOURCES += encoding/copyrect.c \
     bandwidth.c \
     conn_none.c \
     d3des.c \
-    pass_getpass.c
+    pass_getpass.c \
+    vnc.cpp
 
 HEADERS += config.h \
     d3des.h \
@@ -27,3 +28,5 @@ INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/ggiconf/lib/
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/libggi-2.2.2/include
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/libgii-1.0.2/include
 DEPENDPATH += $$PWD/../../../ggi-2.2.2-bundle/ggiconf/lib
+
+INCLUDEPATH += /opt/local/include

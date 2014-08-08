@@ -14,19 +14,23 @@
 #include <QThread>
 #include <QDebug>
 #include "flyggi.h"
+#include <MLVNC.h>
 
-
-void foo( char a )
+void foo( const std::string& a )
 {
-
-    printf("%s",a);
-
+    qDebug("%s", a.c_str() );
 }
+
 
 extern int ggi_main(int argc, char **argv);
 
 int main(int argc, char *argv[])
 {
+    // Test MLVNC signal
+    // MLLibrary::MLVNC* vnc = new MLLibrary::MLVNC;
+    // vnc->connectToTestSignal( boost::bind( foo, _1 ) );
+    // vnc->init();
+
     QGuiApplication app(argc, argv);
     NwImageProvider *imageProvider = new NwImageProvider;
 

@@ -1,5 +1,5 @@
 TEMPLATE = subdirs
-SUBDIRS = ggivnc Hello
+SUBDIRS = Hello
 
 
 

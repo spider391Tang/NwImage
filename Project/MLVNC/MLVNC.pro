@@ -2,13 +2,32 @@ TEMPLATE = app
 
 QT += qml quick widgets
 
-CONFIG += c++11
+# CONFIG += c++11
 
 SOURCES += main.cpp \
     nwimageprovider.cpp \
     flyggi.cpp \
     MLLibraryBase.cpp \
     MLVNC.cpp
+
+SOURCES += ../ggivnc/encoding/copyrect.c \
+    ../ggivnc/encoding/corre.c \
+    ../ggivnc/encoding/desktop-size.c \
+    ../ggivnc/encoding/hextile.c \
+    ../ggivnc/encoding/lastrect.c \
+    ../ggivnc/encoding/raw.c \
+    ../ggivnc/encoding/rre.c \
+    ../ggivnc/encoding/tight.c \
+    ../ggivnc/encoding/wmvi.c \
+    ../ggivnc/encoding/zlib.c \
+    ../ggivnc/encoding/zlibhex.c \
+    ../ggivnc/encoding/zrle.c \
+    ../ggivnc/bandwidth.c \
+    ../ggivnc/conn_none.c \
+    ../ggivnc/d3des.c \
+    ../ggivnc/pass_getpass.c \
+    ../ggivnc/vnc.cpp
+
 
 RESOURCES += qml.qrc
 
@@ -22,11 +41,16 @@ HEADERS += \
     nwimageprovider.h \
     flyggi.h \
     MLLibraryBase.h \
-    MLVNC.h
+    MLVNC.h \
+    ../ggivnc/config.h \
+    ../ggivnc/d3des.h \
+    ../ggivnc/vnc.h
 
+
+INCLUDEPATH += /opt/local/include
 # LIBS += -L../Hello -lHello
 LIBS += /Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/Hello/libHello.a
-LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/ggivnc -lggivnc
+#LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/ggivnc -lggivnc
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/ggivnc/libggivnc.a
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/libgg.a
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/libgii.a
@@ -34,6 +58,7 @@ LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-De
 
 macx: LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/ -lgg -lgii -lggi -lz
 
+INCLUDEPATH += ../ggivnc/
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/ggiconf/lib/
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/libggi-2.2.2/include
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/libgii-1.0.2/include

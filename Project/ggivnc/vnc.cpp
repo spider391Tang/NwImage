@@ -114,6 +114,13 @@ extern "C" {
 #include <QDebug>
 #include <QImage>
 #include "../MLVNC/flyggi.h"
+#include "../MLVNC/MLVNC.h"
+
+#include <boost/signals2/signal.hpp>
+#include <boost/signals2/connection.hpp>
+
+typedef boost::signals2::signal <void( const std::string& )> TestSignalType;
+TestSignalType mTestEvent;
 
 struct globals g;
 
@@ -1757,19 +1764,21 @@ render_update(void)
             g.post_flush_hook(g.flush_hook_data);
         }
 
-        qDebug() << "update_frame";
-        int numbufs = ggiDBGetNumBuffers( g.stem );
-        qDebug() << "Number of memory buffers = " << numbufs;
-        const ggi_directbuffer *db;
-        db = ggiDBGetBuffer( g.stem, 0 );
-        if( !db->type & GGI_DB_SIMPLE_PLB )
-        {
-            qDebug() << "We don't handle anything but simple pixel-linear buffer";
-        }
-        int frameno = db->frame;
-        int ggiStride = db->buffer.plb.stride;
-        printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
-        qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
+        static int count = 0;
+        qDebug() << "update_frame" << ++count;
+        mTestEvent("[Signal]update_frame");
+        //int numbufs = ggiDBGetNumBuffers( g.stem );
+        //qDebug() << "Number of memory buffers = " << numbufs;
+        //const ggi_directbuffer *db;
+        //db = ggiDBGetBuffer( g.stem, 0 );
+        //if( !db->type & GGI_DB_SIMPLE_PLB )
+        //{
+        //    qDebug() << "We don't handle anything but simple pixel-linear buffer";
+        //}
+        //int frameno = db->frame;
+        //int ggiStride = db->buffer.plb.stride;
+        //printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
+        //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
         // memcpy( ptr, db->read, ggiStride * 1080 );
         // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
         // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
@@ -3749,10 +3758,22 @@ remove_path(const char *file)
 	return file;
 }
 
+boost::signals2::connection connectToTestSignal
+    (
+    const TestSignalType::slot_type& aSlot
+    )
+{
+    return mTestEvent.connect( aSlot );
+}
+
 //int
 //ggivnc_main(int argc, char * const argv[])
 int ggivnc_main(int argc, char **argv)
 {
+
+// connect signal
+        connectToTestSignal( 
+          boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
 	int c;
 	int status = 0;
 #ifdef HAVE_INPUT_FDSELECT

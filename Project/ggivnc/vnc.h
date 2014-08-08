@@ -282,7 +282,7 @@ const char *gai_strerror(int error);
 #endif /* HAVE_GGNEWSTEM */
 
 #if _MSC_VER <= 1200
-#define intptr_t int
+//#define intptr_t int
 #endif
 
 #endif /* VNC_H */
