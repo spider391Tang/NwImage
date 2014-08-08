@@ -118,6 +118,7 @@ extern "C" {
 
 #include <boost/signals2/signal.hpp>
 #include <boost/signals2/connection.hpp>
+#include <boost/function.hpp>
 
 typedef boost::signals2::signal <void( const std::string& )> TestSignalType;
 TestSignalType mTestEvent;
@@ -3766,14 +3767,21 @@ boost::signals2::connection connectToTestSignal
     return mTestEvent.connect( aSlot );
 }
 
+boost::function<void (const std::string&)> ggivnc_func; 
+
+void register_signal_handle_function( boost::function<void (const std::string&)> f )
+{
+    ggivnc_func = f;
+}
 //int
 //ggivnc_main(int argc, char * const argv[])
 int ggivnc_main(int argc, char **argv)
 {
-
+        //f = boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 );
 // connect signal
-        connectToTestSignal( 
-          boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
+        //connectToTestSignal( 
+        //  boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
+        connectToTestSignal( ggivnc_func );
 	int c;
 	int status = 0;
 #ifdef HAVE_INPUT_FDSELECT

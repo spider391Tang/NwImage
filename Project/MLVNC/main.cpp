@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
     // MLLibrary::MLVNC* vnc = new MLLibrary::MLVNC;
     // vnc->connectToTestSignal( boost::bind( foo, _1 ) );
     // vnc->init();
+    MLLibrary::MLVNC::getInstance()->init();
 
     QGuiApplication app(argc, argv);
     NwImageProvider *imageProvider = new NwImageProvider;
@@ -40,7 +41,7 @@ int main(int argc, char *argv[])
     viewer->setSource(QStringLiteral("qrc:main.qml"));
     viewer->show();
 
-    QObject::connect(Flyggi::instance(), SIGNAL(ggiReady(const QString&)), imageProvider, SLOT(slotNewFrameReady()));
+    // QObject::connect(Flyggi::instance(), SIGNAL(ggiReady(const QString&)), imageProvider, SLOT(slotNewFrameReady()));
 
     //QTimer timer;
     //QObject::connect(&timer, SIGNAL(timeout()), fly, SLOT(startFly()));

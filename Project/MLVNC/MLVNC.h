@@ -48,7 +48,7 @@ public:
     virtual ~MLVNC();
     //void connect(std::string& host, int port);
     //void disconnect();
-    //void startRender();
+    void startRender();
     //void stopRender();
     //void setUpdateFPS(int frame_per_second);
     //void repaint();
