@@ -8,7 +8,6 @@ extern "C" {
 #include <boost/signals2/connection.hpp>
 #include <boost/function.hpp>
 
-typedef boost::signals2::signal <void(const ggi_directbuffer*)> BufferChangedSignalType;
-typedef boost::function<void(const ggi_directbuffer*)> BufferChangedHandler;
+typedef boost::signals2::signal <void()> BufferRenderedSignalType;
 
 #endif // MLVNCBUFFER_H

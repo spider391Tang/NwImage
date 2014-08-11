@@ -4,8 +4,11 @@
 #include "../ggivnc/MLVNCBuffer.h"
 
 extern int ggivnc_main(int argc, char **argv);
-extern void register_signal_handle_function( boost::function<void (const ggi_directbuffer*)> f );
 
+extern boost::signals2::connection connectToBufferRenderedSignal
+    (
+    const BufferRenderedSignalType::slot_type& aSlot
+    );
 namespace MLLibrary {
 
 MLVNC* MLVNC::mInstance = NULL;
@@ -20,7 +23,7 @@ void MLVNC::startRender()
     ggivnc_main( 2, aa);
 }
 
-void MLVNC::onHandleSignal( const ggi_directbuffer* db )
+void MLVNC::onHandleSignal()
 {
     //qDebug() << msg.c_str();
     
@@ -92,8 +95,9 @@ void MLVNC::init()
 // section 127-0-1-1-584d88fa:144b573379b:-8000:0000000000000B86 begin
 {
 
-    BufferChangedHandler f = boost::bind( &MLVNC::onHandleSignal,this, _1 );
-    register_signal_handle_function( f );
+    //BufferChangedHandler f = boost::bind( &MLVNC::onHandleSignal,this, _1 );
+    // register_signal_handle_function( f );
+    connectToBufferRenderedSignal( boost::bind( &MLVNC::onHandleSignal,this ) );
 
         //  boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
 

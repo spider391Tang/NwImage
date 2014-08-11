@@ -75,7 +75,7 @@ public:
     void setFrameBufferPtr(unsigned char*buffer);
     //void sendKeyEvents(int key_down, int key_code, int key_extra = 0);
     //void sendPointerEvents(int buttons, int x, int y);
-    void onHandleSignal( const ggi_directbuffer* db );
+    void onHandleSignal();
     boost::signals2::connection register_vnc_events( const VNCSignalType::slot_type& aSlot );
     
 private:

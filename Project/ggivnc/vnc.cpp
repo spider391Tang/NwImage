@@ -118,9 +118,9 @@ extern "C" {
 #include "MLVNCBuffer.h"
 
 
-BufferChangedSignalType gBufferChangedEvent;
-BufferChangedHandler gBufferChangedHandler;
-unsigned char* gFrameBuffer;
+BufferRenderedSignalType gBufferRenderedEvent;
+// BufferChangedHandler gBufferChangedHandler;
+unsigned char* gTargetFrameBuffer;
 
 struct globals g;
 
@@ -1768,7 +1768,6 @@ render_update(void)
         static int count = 0;
         qDebug() << "update_frame" << ++count;
         int numbufs = ggiDBGetNumBuffers( g.stem );
-        qDebug() << "Number of memory buffers = " << numbufs;
         const ggi_directbuffer *db;
         db = ggiDBGetBuffer( g.stem, 0 );
         if( !db->type & GGI_DB_SIMPLE_PLB )
@@ -1776,21 +1775,9 @@ render_update(void)
             qDebug() << "We don't handle anything but simple pixel-linear buffer";
         }
 
-        qDebug() << "gBufferChangedEvent";
-        gBufferChangedEvent( db );
+        qDebug() << "[vnc.cpp] gBufferRenderedEvent";
+        gBufferRenderedEvent();
     
-        //int frameno = db->frame;
-        //int ggiStride = db->buffer.plb.stride;
-        // printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
-        //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
-        // memcpy( ptr, db->read, ggiStride * 1080 );
-        // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
-        // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
-        //QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
-
-        //Flyggi::instance()->assignImage( img );
-        //Flyggi::instance()->ggiReady("hello");
-
 }
 
 static int
@@ -3531,9 +3518,7 @@ open_visual(void)
 	g.stem = ggNewStem(libgii, libggi, libggiwmh, NULL);
 	if (!g.stem)
 		goto err_ggexit;
-	//if (ggiOpen(g.stem, NULL) < 0)
-	g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gFrameBuffer );
-	if( g.stem < 0 )
+        if (ggiOpen(g.stem, NULL) < 0)
 		goto err_ggdelstem;
 
 	if (g.gii_input) {
@@ -3579,7 +3564,7 @@ open_visual(void)
 
     // Assign target frame buffer to ggi
     // Reference from http://manpages.ubuntu.com/manpages/intrepid/man7/display-memory.7.html
-    g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gFrameBuffer );
+    g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
 	if( g.stem < 0 )
         goto err_ggiclose;
 
@@ -3767,24 +3752,17 @@ remove_path(const char *file)
 	return file;
 }
 
-boost::signals2::connection connectToBufferChangedSignal
+boost::signals2::connection connectToBufferRenderedSignal
     (
-    const BufferChangedSignalType::slot_type& aSlot
+    const BufferRenderedSignalType::slot_type& aSlot
     )
 {
-    return gBufferChangedEvent.connect( aSlot );
-}
-
-
-void register_signal_handle_function( BufferChangedHandler f )
-{
-    gBufferChangedHandler = f;
-    connectToBufferChangedSignal( gBufferChangedHandler );
+    return gBufferRenderedEvent.connect( aSlot );
 }
 
 void setFrameBuffer( unsigned char* buf )
 {
-    gFrameBuffer = buf;
+    gTargetFrameBuffer = buf;
 }
 
 //int
