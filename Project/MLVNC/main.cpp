@@ -33,7 +33,11 @@ int main(int argc, char *argv[])
     MLLibrary::MLVNC::getInstance()->init();
 
     QGuiApplication app(argc, argv);
-    NwImageProvider *imageProvider = new NwImageProvider;
+    NwImageProvider *imageProvider = new NwImageProvider( 1920, 1080, QImage::Format_RGB16 );
+
+
+    MLLibrary::MLVNC::getInstance()->register_vnc_events( boost::bind( &NwImageProvider::slotNewFrameReady, imageProvider ) );
+    MLLibrary::MLVNC::getInstance()->setFrameBufferPtr( imageProvider->getFrameBuffer() );
 
     QQuickView *viewer = new QQuickView();
     viewer->rootContext()->engine()->addImageProvider(QLatin1String("NwImageProvider"), imageProvider);

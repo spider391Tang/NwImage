@@ -285,4 +285,6 @@ const char *gai_strerror(int error);
 //#define intptr_t int
 #endif
 
+
 #endif /* VNC_H */
+

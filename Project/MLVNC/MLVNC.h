@@ -10,7 +10,7 @@
 #define MLLibrary_MLVNC_h
 
 #include "MLLibraryBase.h"
-
+#include <ggi/ggi.h>
 #include <functional>
 #include <string>
 #include <boost/signals2/signal.hpp>
@@ -25,6 +25,8 @@ class MLVNC: virtual public MLLibraryBase {
     // Types 
     //------------------------------------------------------------------------
     
+    typedef boost::signals2::signal <void()> VNCSignalType;
+    typedef boost::function<void()> VNCHandler;
 
     //------------------------------------------------------------------------
     // Functions
@@ -58,17 +60,19 @@ public:
     //void setScreenHeight(int height);
     //void setColorDepth(int color_depth);
     //void setColorFormat(int color_format);
-    //void setFrameBufferPtr(unsigned char*buffer);
+    void setFrameBufferPtr(unsigned char*buffer);
     //void sendKeyEvents(int key_down, int key_code, int key_extra = 0);
     //void sendPointerEvents(int buttons, int x, int y);
-    void onHandleSignal( const std::string& msg );
-    // void register_vnc_events(std::function<void(int)>);
-
+    void onHandleSignal( const ggi_directbuffer* db );
+    boost::signals2::connection register_vnc_events( const VNCSignalType::slot_type& aSlot );
+    
 private:
 
     //! callback variable for register_vnc_events to report vnc event ids
     // std::function<void(int)> mVNCEventCb;
     static MLVNC* mInstance;
+    unsigned char* mFrameBuffer;
+    VNCSignalType mVNCEvent;
 };
 
 } /* End of namespace MLLibrary */

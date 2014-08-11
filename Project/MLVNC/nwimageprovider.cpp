@@ -1,8 +1,11 @@
 #include "NwImageProvider.h"
 #include "flyggi.h"
-NwImageProvider::NwImageProvider()
+NwImageProvider::NwImageProvider( int width, int height, QImage::Format format )
     : QQuickImageProvider(QQmlImageProviderBase::Image)
+    , mRawData( width*height*2, '\0' )
+    , mImage( reinterpret_cast<uchar*>( mRawData.data() ), width, height, width*2, format )
 {
+
 }
 
 QImage NwImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
@@ -33,7 +36,7 @@ QImage NwImageProvider::requestImage(const QString &id, QSize *size, const QSize
     //               requestedSize.height() > 0 ? requestedSize.height() : height, QImage::Format_RGB16);
     //image.fill(QColor(strId).rgba());
     this->blockSignals(false);
-    return Flyggi::instance()->getImage();
+    return mImage;
 }
 
 void NwImageProvider::slotNewFrameReady()

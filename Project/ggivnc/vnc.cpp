@@ -115,13 +115,12 @@ extern "C" {
 #include <QImage>
 #include "../MLVNC/flyggi.h"
 #include "../MLVNC/MLVNC.h"
+#include "MLVNCBuffer.h"
 
-#include <boost/signals2/signal.hpp>
-#include <boost/signals2/connection.hpp>
-#include <boost/function.hpp>
 
-typedef boost::signals2::signal <void( const std::string& )> TestSignalType;
-TestSignalType mTestEvent;
+BufferChangedSignalType gBufferChangedEvent;
+BufferChangedHandler gBufferChangedHandler;
+// BufferChangedHandler gBufferChangedHandler;
 
 struct globals g;
 
@@ -1767,18 +1766,21 @@ render_update(void)
 
         static int count = 0;
         qDebug() << "update_frame" << ++count;
-        mTestEvent("[Signal]update_frame");
-        //int numbufs = ggiDBGetNumBuffers( g.stem );
-        //qDebug() << "Number of memory buffers = " << numbufs;
-        //const ggi_directbuffer *db;
-        //db = ggiDBGetBuffer( g.stem, 0 );
-        //if( !db->type & GGI_DB_SIMPLE_PLB )
-        //{
-        //    qDebug() << "We don't handle anything but simple pixel-linear buffer";
-        //}
+        int numbufs = ggiDBGetNumBuffers( g.stem );
+        qDebug() << "Number of memory buffers = " << numbufs;
+        const ggi_directbuffer *db;
+        db = ggiDBGetBuffer( g.stem, 0 );
+        if( !db->type & GGI_DB_SIMPLE_PLB )
+        {
+            qDebug() << "We don't handle anything but simple pixel-linear buffer";
+        }
+
+        qDebug() << "gBufferChangedEvent";
+        gBufferChangedEvent( db );
+    
         //int frameno = db->frame;
         //int ggiStride = db->buffer.plb.stride;
-        //printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
+        // printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
         //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
         // memcpy( ptr, db->read, ggiStride * 1080 );
         // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
@@ -3759,29 +3761,24 @@ remove_path(const char *file)
 	return file;
 }
 
-boost::signals2::connection connectToTestSignal
+boost::signals2::connection connectToBufferChangedSignal
     (
-    const TestSignalType::slot_type& aSlot
+    const BufferChangedSignalType::slot_type& aSlot
     )
 {
-    return mTestEvent.connect( aSlot );
+    return gBufferChangedEvent.connect( aSlot );
 }
 
-boost::function<void (const std::string&)> ggivnc_func; 
 
-void register_signal_handle_function( boost::function<void (const std::string&)> f )
+void register_signal_handle_function( BufferChangedHandler f )
 {
-    ggivnc_func = f;
+    gBufferChangedHandler = f;
+    connectToBufferChangedSignal( gBufferChangedHandler );
 }
 //int
 //ggivnc_main(int argc, char * const argv[])
 int ggivnc_main(int argc, char **argv)
 {
-        //f = boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 );
-// connect signal
-        //connectToTestSignal( 
-        //  boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
-        connectToTestSignal( ggivnc_func );
 	int c;
 	int status = 0;
 #ifdef HAVE_INPUT_FDSELECT

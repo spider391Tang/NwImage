@@ -1,10 +1,10 @@
 #include "../ggivnc/config.h"
 #include "MLVNC.h"
 #include <QDebug>
-#include <boost/function.hpp>
+#include "../ggivnc/MLVNCBuffer.h"
 
 extern int ggivnc_main(int argc, char **argv);
-extern void register_signal_handle_function( boost::function<void (const std::string&)> f );
+extern void register_signal_handle_function( boost::function<void (const ggi_directbuffer*)> f );
 
 namespace MLLibrary {
 
@@ -20,9 +20,37 @@ void MLVNC::startRender()
     ggivnc_main( 2, aa);
 }
 
-void MLVNC::onHandleSignal( const std::string& msg )
+void MLVNC::onHandleSignal( const ggi_directbuffer* db )
 {
-    qDebug() << msg.c_str();
+    //qDebug() << msg.c_str();
+    
+     qDebug() << "onHandleSignal";
+    //int frameno = db->frame;
+    //int ggiStride = db->buffer.plb.stride;
+    //printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
+    //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
+     memcpy( mFrameBuffer, db->read, 1920*2*1080 );
+    // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
+    // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
+    //QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
+
+    //Flyggi::instance()->assignImage( img );
+    //Flyggi::instance()->ggiReady("hello");
+     qDebug() << "Calling mVNCEvent";
+    mVNCEvent();
+}
+
+boost::signals2::connection MLVNC::register_vnc_events
+    (
+    const VNCSignalType::slot_type& aSlot
+    )
+{
+    return mVNCEvent.connect( aSlot );
+}
+
+void MLVNC::setFrameBufferPtr( unsigned char* buffer )
+{
+    mFrameBuffer = buffer;
 }
 
 MLVNC::~MLVNC()
@@ -47,7 +75,7 @@ void MLVNC::init()
 // section 127-0-1-1-584d88fa:144b573379b:-8000:0000000000000B86 begin
 {
 
-    boost::function<void (const std::string&)> f = boost::bind( &MLVNC::onHandleSignal,this, _1 );
+    BufferChangedHandler f = boost::bind( &MLVNC::onHandleSignal,this, _1 );
     register_signal_handle_function( f );
 
         //  boost::bind( &MLLibrary::MLVNC::onHandleSignal,MLLibrary::MLVNC::getInstance(), _1 ) );
