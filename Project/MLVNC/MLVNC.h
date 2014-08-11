@@ -28,6 +28,18 @@ class MLVNC: virtual public MLLibraryBase {
     typedef boost::signals2::signal <void()> VNCSignalType;
     typedef boost::function<void()> VNCHandler;
 
+    enum MLVNCColorDepth
+    {
+        MLVNC_1BIT,
+        MLVNC_2BIT,
+        MLVNC_4BIT,
+        MLVNC_8BIT,
+        MLVNC_15BIT,
+        MLVNC_16BIT,
+        MLVNC_24BIT,
+        MLVNC_32BIT
+    };
+
     //------------------------------------------------------------------------
     // Functions
     //------------------------------------------------------------------------
@@ -54,12 +66,12 @@ public:
     //void stopRender();
     //void setUpdateFPS(int frame_per_second);
     //void repaint();
-    //void setFrameBufWidth(int width);
-    //void setFrameBufHeight(int height);
+    void setFrameBufWidth(int width);
+    void setFrameBufHeight(int height);
     //void setScreenWidth(int width);
     //void setScreenHeight(int height);
-    //void setColorDepth(int color_depth);
-    //void setColorFormat(int color_format);
+    void setColorDepth( MLVNCColorDepth color_depth );
+    void setColorFormat(int color_format);
     void setFrameBufferPtr(unsigned char*buffer);
     //void sendKeyEvents(int key_down, int key_code, int key_extra = 0);
     //void sendPointerEvents(int buttons, int x, int y);
@@ -73,6 +85,9 @@ private:
     static MLVNC* mInstance;
     unsigned char* mFrameBuffer;
     VNCSignalType mVNCEvent;
+    int mWidth;
+    int mHeight;
+    MLVNCColorDepth mColorDepth;
 };
 
 } /* End of namespace MLLibrary */

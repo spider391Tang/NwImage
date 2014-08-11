@@ -28,16 +28,26 @@ void MLVNC::onHandleSignal( const ggi_directbuffer* db )
     //int frameno = db->frame;
     //int ggiStride = db->buffer.plb.stride;
     //printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
-    //qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
-     memcpy( mFrameBuffer, db->read, 1920*2*1080 );
+    // qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
+    // memcpy( mFrameBuffer, db->read, 1920*2*1080 );
     // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
     // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
-    //QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
+    // QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
 
-    //Flyggi::instance()->assignImage( img );
-    //Flyggi::instance()->ggiReady("hello");
+    // Flyggi::instance()->assignImage( img );
+    // Flyggi::instance()->ggiReady("hello");
      qDebug() << "Calling mVNCEvent";
-    mVNCEvent();
+     mVNCEvent();
+}
+
+void MLVNC::setFrameBufWidth( int width )
+{
+    mWidth = width;
+}
+
+void MLVNC::setFrameBufHeight( int height )
+{
+    mHeight = height;
 }
 
 boost::signals2::connection MLVNC::register_vnc_events
@@ -53,8 +63,15 @@ void MLVNC::setFrameBufferPtr( unsigned char* buffer )
     mFrameBuffer = buffer;
 }
 
+void MLVNC::setColorDepth( MLVNCColorDepth color_depth )
+{
+
+}
+
+
 MLVNC::~MLVNC()
 {
+
 }
 
 MLVNC::MLVNC()

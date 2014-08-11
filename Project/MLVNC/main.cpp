@@ -23,6 +23,7 @@ void foo( const std::string& a )
 
 
 extern int ggi_main(int argc, char **argv);
+extern void setFrameBuffer( unsigned char* buf );
 
 int main(int argc, char *argv[])
 {
@@ -38,6 +39,8 @@ int main(int argc, char *argv[])
 
     MLLibrary::MLVNC::getInstance()->register_vnc_events( boost::bind( &NwImageProvider::slotNewFrameReady, imageProvider ) );
     MLLibrary::MLVNC::getInstance()->setFrameBufferPtr( imageProvider->getFrameBuffer() );
+    setFrameBuffer( imageProvider->getFrameBuffer() );
+    
 
     QQuickView *viewer = new QQuickView();
     viewer->rootContext()->engine()->addImageProvider(QLatin1String("NwImageProvider"), imageProvider);

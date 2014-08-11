@@ -120,7 +120,7 @@ extern "C" {
 
 BufferChangedSignalType gBufferChangedEvent;
 BufferChangedHandler gBufferChangedHandler;
-// BufferChangedHandler gBufferChangedHandler;
+unsigned char* gFrameBuffer;
 
 struct globals g;
 
@@ -1341,6 +1341,7 @@ create_wire_stem(void)
 	}
 #else
 	g.wire_stem = ggiOpen(target, NULL);
+
 	if (!g.wire_stem) {
 		free(target);
 		return -1;
@@ -3530,7 +3531,9 @@ open_visual(void)
 	g.stem = ggNewStem(libgii, libggi, libggiwmh, NULL);
 	if (!g.stem)
 		goto err_ggexit;
-	if (ggiOpen(g.stem, NULL) < 0)
+	//if (ggiOpen(g.stem, NULL) < 0)
+	g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gFrameBuffer );
+	if( g.stem < 0 )
 		goto err_ggdelstem;
 
 	if (g.gii_input) {
@@ -3573,9 +3576,12 @@ open_visual(void)
 
 	if (ggiInit() < 0)
 		return -1;
-	g.stem = ggiOpen(NULL);
-	if (!g.stem)
-		goto err_ggiexit;
+
+    // Assign target frame buffer to ggi
+    // Reference from http://manpages.ubuntu.com/manpages/intrepid/man7/display-memory.7.html
+    g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gFrameBuffer );
+	if( g.stem < 0 )
+        goto err_ggiclose;
 
 	if (g.gii_input) {
 		gii_input_t inp = giiOpen(g.gii_input, NULL);
@@ -3775,6 +3781,12 @@ void register_signal_handle_function( BufferChangedHandler f )
     gBufferChangedHandler = f;
     connectToBufferChangedSignal( gBufferChangedHandler );
 }
+
+void setFrameBuffer( unsigned char* buf )
+{
+    gFrameBuffer = buf;
+}
+
 //int
 //ggivnc_main(int argc, char * const argv[])
 int ggivnc_main(int argc, char **argv)
