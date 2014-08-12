@@ -119,7 +119,6 @@ extern "C" {
 
 
 BufferRenderedSignalType gBufferRenderedEvent;
-// BufferChangedHandler gBufferChangedHandler;
 unsigned char* gTargetFrameBuffer;
 
 struct globals g;
@@ -1777,7 +1776,6 @@ render_update(void)
 
         qDebug() << "[vnc.cpp] gBufferRenderedEvent";
         gBufferRenderedEvent();
-    
 }
 
 static int
@@ -3752,7 +3750,7 @@ remove_path(const char *file)
 	return file;
 }
 
-boost::signals2::connection connectToBufferRenderedSignal
+boost::signals2::connection connectToGgivncBufferRenderedSignal
     (
     const BufferRenderedSignalType::slot_type& aSlot
     )
@@ -3760,7 +3758,7 @@ boost::signals2::connection connectToBufferRenderedSignal
     return gBufferRenderedEvent.connect( aSlot );
 }
 
-void setFrameBuffer( unsigned char* buf )
+void setGgivncTargetFrameBuffer( unsigned char* buf )
 {
     gTargetFrameBuffer = buf;
 }

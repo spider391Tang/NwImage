@@ -5,10 +5,10 @@ QT += qml quick widgets
 # CONFIG += c++11
 
 SOURCES += main.cpp \
-    nwimageprovider.cpp \
-    flyggi.cpp \
     MLLibraryBase.cpp \
-    MLVNC.cpp
+    MLVNC.cpp \
+    VncThread.cpp \
+    VncImageProvider.cpp
 
 SOURCES += ../ggivnc/encoding/copyrect.c \
     ../ggivnc/encoding/corre.c \
@@ -38,13 +38,13 @@ QML_IMPORT_PATH =
 include(deployment.pri)
 
 HEADERS += \
-    nwimageprovider.h \
-    flyggi.h \
     MLLibraryBase.h \
     MLVNC.h \
     ../ggivnc/config.h \
     ../ggivnc/d3des.h \
-    ../ggivnc/vnc.h
+    ../ggivnc/vnc.h \
+    VncThread.h \
+    VncImageProvider.h
 
 
 INCLUDEPATH += /opt/local/include

@@ -40,6 +40,13 @@ class MLVNC: virtual public MLLibraryBase {
         MLVNC_32BIT
     };
 
+    enum MLVNCColorFormat
+    {
+       RGB565,
+       RGB888,
+       RGB8888
+    };
+
     //------------------------------------------------------------------------
     // Functions
     //------------------------------------------------------------------------
@@ -60,34 +67,38 @@ public:
 public:
     MLVNC();
     virtual ~MLVNC();
-    //void connect(std::string& host, int port);
-    //void disconnect();
+    void connect(std::string& host, int port);
+    void disconnect();
     void startRender();
-    //void stopRender();
-    //void setUpdateFPS(int frame_per_second);
-    //void repaint();
+    void stopRender();
+    void setUpdateFPS(int frame_per_second);
+    void repaint();
     void setFrameBufWidth(int width);
     void setFrameBufHeight(int height);
     //void setScreenWidth(int width);
     //void setScreenHeight(int height);
     void setColorDepth( MLVNCColorDepth color_depth );
-    void setColorFormat(int color_format);
-    void setFrameBufferPtr(unsigned char*buffer);
+    void setColorFormat( MLVNCColorFormat color_format );
+    void setFrameBufferPtr( unsigned char* buffer );
     //void sendKeyEvents(int key_down, int key_code, int key_extra = 0);
     //void sendPointerEvents(int buttons, int x, int y);
-    void onHandleSignal();
-    boost::signals2::connection register_vnc_events( const VNCSignalType::slot_type& aSlot );
+    void onHandleGgivncSignal();
+    boost::signals2::connection connectToMlvncEvent( const VNCSignalType::slot_type& aSlot );
     
 private:
 
-    //! callback variable for register_vnc_events to report vnc event ids
-    // std::function<void(int)> mVNCEventCb;
+    //! callback variable for connectToMlvncEvent to report vnc event ids
+    // std::function<void(int)> mVncEventCb;
     static MLVNC* mInstance;
     unsigned char* mFrameBuffer;
-    VNCSignalType mVNCEvent;
+    VNCSignalType mVncEvent;
     int mWidth;
     int mHeight;
     MLVNCColorDepth mColorDepth;
+    MLVNCColorFormat mColorFormat;
+    std::string mHost;
+    int mPort;
+    int mFps;
 };
 
 } /* End of namespace MLLibrary */

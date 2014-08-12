@@ -9,11 +9,11 @@ Rectangle {
 
     Column {
         anchors.centerIn: parent
-        Image { source: "image://NwImageProvider/" + currentFrameNumber }
+        Image { source: "image://VncImageProvider/" + currentFrameNumber }
     }
 
     Connections {
-        target: NwImageProvider
+        target: VncImageProvider
         onSignalNewFrameReady: {
             console.log("onSignalNewFrameReady", frameNumber);
             currentFrameNumber = frameNumber;
