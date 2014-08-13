@@ -107,6 +107,12 @@ static Texture *texture_list;
 
 static BufferRenderedSignalType gBufferRenderedEvent;
 static unsigned char* gTargetFrameBuffer = NULL;
+static std::string gPixformat = "p8b8g8r8";
+
+void setFlyggiPixFormat( const std::string& pixformat )
+{
+    gPixformat = pixformat; 
+}
 
 boost::signals2::connection connectToFlyggiBufferRenderedSignal
     (
@@ -245,6 +251,7 @@ static void update_frame(void)
 
     qDebug() << "Screen[" << sx << "," << sy << "]";
     qDebug() << "Virtual[" << vx << "," << vy << "]";
+     
     for (int x=0; x<sx; x++)
     {
     
@@ -547,7 +554,8 @@ int ggi_main(int argc, char **argv)
 
         //vis = ggiOpen(target_str, NULL);
     std::string display = "display-memory:-pixfmt=";
-    display += "r8g8b8"; 
+    display += gPixformat; 
+    //display += "r5g6b5"; 
     display += " pointer";
     //g.stem = e"display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
     qDebug() << "Display: " << display.c_str();

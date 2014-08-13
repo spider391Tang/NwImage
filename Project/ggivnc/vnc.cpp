@@ -119,8 +119,8 @@ extern "C" {
 
 static BufferRenderedSignalType gBufferRenderedEvent;
 static unsigned char* gTargetFrameBuffer = NULL;
-static std::string gPixformat = "r5g6b5";
-static std::string gColorDepth= "GT_16BIT";
+static std::string gPixformat = "p8b8g8r8";
+static std::string gColorDepth= "GT_32BIT";
 
 struct globals g;
 
