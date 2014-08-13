@@ -54,7 +54,7 @@ void MLVNC::startRender()
     ggiDefmode += "x";
     ggiDefmode += boost::lexical_cast<std::string>( mScreenHeight );
 
-    ggiDefmode += "V ";
+    ggiDefmode += " V ";
     ggiDefmode += boost::lexical_cast<std::string>( mFrameBufferWidth );
     ggiDefmode += "x";
     ggiDefmode += boost::lexical_cast<std::string>( mFrameBufferHeight );
@@ -179,7 +179,7 @@ MLVNC::~MLVNC()
 
 MLVNC::MLVNC()
     : mColorFormat( RGB565 )
-    , mColorDepth( MLVNC_16BIT )
+    , mColorDepth( MLVNC_24BIT )
     , mScreenWidth( 1920 )
     , mScreenHeight( 1080 )
     , mFrameBufferWidth( 1920 )

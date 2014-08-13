@@ -547,7 +547,7 @@ int ggi_main(int argc, char **argv)
 
         //vis = ggiOpen(target_str, NULL);
     std::string display = "display-memory:-pixfmt=";
-    display += "r5g6b5"; 
+    display += "r8g8b8"; 
     display += " pointer";
     //g.stem = e"display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
     qDebug() << "Display: " << display.c_str();

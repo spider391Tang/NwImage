@@ -16,7 +16,7 @@ int main( int argc, char *argv[] )
     MLLibrary::MLVNC::getInstance()->init();
 
     QGuiApplication app(argc, argv);
-    VncImageProvider *imageProvider = new VncImageProvider( 1920, 1080, QImage::Format_RGB16 );
+    VncImageProvider *imageProvider = new VncImageProvider( 1920, 1080, 3, QImage::Format_RGB888 );
 
 
     MLLibrary::MLVNC::getInstance()->connectToMlvncEvent( boost::bind( &VncImageProvider::slotNewFrameReady, imageProvider ) );

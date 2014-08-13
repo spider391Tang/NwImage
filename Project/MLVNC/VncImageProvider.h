@@ -8,7 +8,7 @@ class VncImageProvider : public QObject, public QQuickImageProvider
 {
     Q_OBJECT
 public:
-    VncImageProvider( int width, int height, QImage::Format format );
+    VncImageProvider( int width, int height, int depth, QImage::Format format );
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
     unsigned char* getFrameBuffer(){ return reinterpret_cast<unsigned char*>( mRawData.data() ); }
 
