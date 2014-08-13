@@ -26,7 +26,8 @@ SOURCES += ../ggivnc/encoding/copyrect.c \
     ../ggivnc/conn_none.c \
     ../ggivnc/d3des.c \
     ../ggivnc/pass_getpass.c \
-    ../ggivnc/vnc.cpp
+    ../ggivnc/vnc.cpp \
+    ../ggivnc/flying_ggi.cpp
 
 
 RESOURCES += qml.qrc

@@ -45,7 +45,8 @@
 #include "banner.inc.c"
 #include <QDebug>
 #include <QImage>
-#include "flyggi.h"
+#include "../MLVNC/MLVNC.h"
+#include "MLVNCBuffer.h"
 
 #define fixed  int32_t   /* 16.16 */
 
@@ -103,6 +104,22 @@ static Texture *texture_list;
 
 //static QByteArray data;
 //static QDataStream ds( &data, QIODevice::ReadWrite );
+
+static BufferRenderedSignalType gBufferRenderedEvent;
+static unsigned char* gTargetFrameBuffer = NULL;
+
+boost::signals2::connection connectToFlyggiBufferRenderedSignal
+    (
+    const BufferRenderedSignalType::slot_type& aSlot
+    )
+{
+    return gBufferRenderedEvent.connect( aSlot );
+}
+
+void setFlyggiTargetFrameBuffer( unsigned char* buf )
+{
+    gTargetFrameBuffer = buf;
+}
 
 static void banner_size(int *width, int *height)
 {
@@ -195,41 +212,85 @@ static void translate_hline(int x, int y, int w, uint8_t *data)
 
 static void update_frame(void)
 {
-    if (use_putbox) {
-        ggiPutBox(vis, 0, 0, screen_width, screen_height, image_buf);
-    } else {
-        int y;
-        uint8_t *src = (uint8_t *) image_buf;
+    //if (use_putbox) {
+    //    ggiPutBox(vis, 0, 0, screen_width, screen_height, image_buf);
+    //} else {
+    //    int y;
+    //    uint8_t *src = (uint8_t *) image_buf;
 
-        for (y=0; y < screen_height; y++) {
-            translate_hline(0, y, screen_width, src);
-            src += screen_width;
-        }
+    //    for (y=0; y < screen_height; y++) {
+    //        translate_hline(0, y, screen_width, src);
+    //        src += screen_width;
+    //    }
+    //}
+
+    /* These holde the visible screen size (sx,sy) and
+     * the virtual size (vx,vy). On most targets you can 
+     * request a certain larger area on which the visible
+     * area can be placed.
+     */
+
+    ggi_color map[256];
+    ggi_mode mode;
+    ggiGetMode(vis, &mode);
+
+    int sx,sy,vx,vy;
+    int sx_5, sx_12;   /* 1/5 and 1/12 respectively */
+    int sy_5, sy_12;
+    vx=mode.virt.x;    vy=mode.virt.y;
+    sx=mode.visible.x; sy=mode.visible.y;
+    sx_5 = sx/5; sx_12 = sx/12;
+    sy_5 = sy/5; sy_12 = sy/12;
+    int i = 10;
+
+    qDebug() << "Screen[" << sx << "," << sy << "]";
+    qDebug() << "Virtual[" << vx << "," << vy << "]";
+    for (int x=0; x<sx; x++)
+    {
+    
+        /* Make i (intensity) so it varies from 0-0xFFFF over
+         * the visible length
+         */
+        i = 0xFFFF*x/(sx-1);
+        
+        /* Now first make a color descriptor for the red bar. It
+         * will holf the R/G/B triplet x/0/0 describing the
+         * shades of red.
+         */
+        map[0].r=i; map[0].g=0; map[0].b=0;
+        
+        /* ggiMapColor will return the color value that is
+         * closest to the requested color. We set this as active
+         * drawing color.
+         */
+        ggiSetGCForeground(vis,ggiMapColor(vis, &map[0]));
+        
+        /* Then we draw a small vertical line at y=20 and height=20.
+         */
+        ggiDrawVLine(vis, x, 4*sy_12, sy_12);
+        
+        /* Now we do the same with green. 
+         */
+        map[1].r=0; map[1].g=i; map[1].b=0;
+        ggiSetGCForeground(vis,ggiMapColor(vis, &map[1]));
+        ggiDrawVLine(vis, x, 5*sy_12, sy_12);
+        
+        /* blue */
+        map[2].r=0; map[2].g=0; map[2].b=i;
+        ggiSetGCForeground(vis,ggiMapColor(vis, &map[2]));
+        ggiDrawVLine(vis, x, 6*sy_12, sy_12);
+        
+        /* grey */
+        map[3].r=i; map[3].g=i; map[3].b=i;
+        ggiSetGCForeground(vis,ggiMapColor(vis, &map[3]));
+        ggiDrawVLine(vis, x, 7*sy_12, sy_12);
     }
 
     if(async)
         ggiFlush(vis);
-    qDebug() << "update_frame";
-    int numbufs = ggiDBGetNumBuffers( vis );
-    qDebug() << "Number of memory buffers = " << numbufs;
-    const ggi_directbuffer *db;
-    db = ggiDBGetBuffer( vis, 0 );
-    if( !db->type & GGI_DB_SIMPLE_PLB )
-    {
-        qDebug() << "We don't handle anything but simple pixel-linear buffer";
-    }
-    int frameno = db->frame;
-    int ggiStride = db->buffer.plb.stride;
-    printf("frameno,stride,pixelsize = [%d,%d,%d]\n", frameno, ggiStride, db->buffer.plb.pixelformat->size );
-    qDebug() << "frameno,stride,pixelsize = " << frameno << "," << ggiStride << "," << db->buffer.plb.pixelformat->size;
-    // memcpy( ptr, db->read, ggiStride * 1080 );
-    // ds.writeRawData( (const char*)db->read, ggiStride * 1080 );
-    // Flyggi::instance()->getImage().loadFromData( (const uchar*)db->read, ggiStride*1080 );
-    QImage img( ( const uchar*)db->read, 1920, 1080, ggiStride, QImage::Format_RGB16 );
-
-    Flyggi::instance()->assignImage( img );
-    Flyggi::instance()->ggiReady("hello");
-    //Flyggi::emitFly( data );
+    static int count = 0;
+    qDebug() << "update_frame" << ++count;
+    gBufferRenderedEvent();
 }
 
 static void init_textures(void)
@@ -484,7 +545,13 @@ int ggi_main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-        vis = ggiOpen(target_str, NULL);
+        //vis = ggiOpen(target_str, NULL);
+    std::string display = "display-memory:-pixfmt=";
+    display += "r5g6b5"; 
+    display += " pointer";
+    //g.stem = e"display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
+    qDebug() << "Display: " << display.c_str();
+    vis = ggiOpen( display.c_str(), gTargetFrameBuffer );
 
         if (vis == NULL) {
                 ggiPanic("Failed to open visual.\n");
