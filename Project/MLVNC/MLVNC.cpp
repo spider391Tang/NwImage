@@ -2,9 +2,13 @@
 #include "MLVNC.h"
 #include <QDebug>
 #include "../ggivnc/MLVNCBuffer.h"
+#include <stdlib.h>
+#include <boost/lexical_cast.hpp>
 
 extern int ggivnc_main(int argc, char **argv);
 extern void setGgivncTargetFrameBuffer( unsigned char* buf );
+extern void setGgivncPixFormat( const std::string& pixformat );
+extern void setGgivncColorDepth( const std::string& colorDepth );
 
 extern boost::signals2::connection connectToGgivncBufferRenderedSignal
     (
@@ -17,11 +21,79 @@ MLVNC* MLVNC::mInstance = NULL;
 
 void MLVNC::startRender()
 {
-    qDebug() << "startFly";
+    // set color format
+    switch( mColorFormat )
+    {
+    case RGB565:
+        setGgivncPixFormat( "r5g6b5" );
+        break;
+    case RGB888:
+        setGgivncPixFormat( "r8g8b8" );
+        break;
+    case RGB8888:
+        //setGgivncPixFormat( "r8g8b8p8" );
+        setGgivncPixFormat( "r8g8b8p8" );
+        break;
+    default:
+        setGgivncPixFormat( "r5g6b5" );
+        break;
+    }
+
+    // Set GGI_DEFMODE environment
+    // Set visible size of the visual
+    std::string ggiDefmode = "S ";
+    ggiDefmode += " ";
+    ggiDefmode += boost::lexical_cast<std::string>( mScreenWidth );
+    ggiDefmode += "x";
+    ggiDefmode += boost::lexical_cast<std::string>( mScreenHeight );
+
+    ggiDefmode += "V ";
+    ggiDefmode += boost::lexical_cast<std::string>( mFrameBufferWidth );
+    ggiDefmode += "x";
+    ggiDefmode += boost::lexical_cast<std::string>( mFrameBufferHeight );
+    ggiDefmode += " [";
+
+    switch( mColorDepth )
+    {
+    case MLVNC_1BIT:
+        ggiDefmode += "GT_1BIT";
+        break;
+    case MLVNC_2BIT:
+        ggiDefmode += "GT_2BIT";
+        break;
+    case MLVNC_4BIT:
+        ggiDefmode += "GT_4BIT";
+        break;
+    case MLVNC_8BIT:
+        ggiDefmode += "GT_8BIT";
+        break;
+    case MLVNC_15BIT:
+        ggiDefmode += "GT_15BIT";
+        break;
+    case MLVNC_16BIT:
+        ggiDefmode += "GT_16BIT";
+        break;
+    case MLVNC_24BIT:
+        ggiDefmode += "GT_24BIT";
+        break;
+    case MLVNC_32BIT:
+        ggiDefmode += "GT_32BIT";
+        break;
+    default:
+        ggiDefmode += "GT_16BIT";
+        break;
+    }
+    ggiDefmode += "]";
+    
+    setenv( "GGI_DEFMODE", ggiDefmode.c_str() , 1 );
+
+    qDebug() << "[MLVNC] startRender: " << ggiDefmode.c_str();
+    //char* aa[] = {"ggivnc","-pixfmt","r5g6b5","10.128.60.135"};
+    //ggivnc_main( 4, aa);
     char* aa[] = {"ggivnc","10.128.60.135"};
+    ggivnc_main( 2, aa);
     // MLLibrary::MLVNC* vnc = new MLLibrary::MLVNC;
     // set environment
-    ggivnc_main( 2, aa);
 }
 
 void MLVNC::stopRender()
@@ -37,12 +109,12 @@ void MLVNC::onHandleGgivncSignal()
 
 void MLVNC::setFrameBufWidth( int width )
 {
-    mWidth = width;
+    mFrameBufferWidth = width;
 }
 
 void MLVNC::setFrameBufHeight( int height )
 {
-    mHeight = height;
+    mFrameBufferHeight = height;
 }
 
 boost::signals2::connection MLVNC::connectToMlvncEvent
@@ -96,6 +168,12 @@ MLVNC::~MLVNC()
 }
 
 MLVNC::MLVNC()
+    : mColorFormat( RGB565 )
+    , mColorDepth( MLVNC_16BIT )
+    , mScreenWidth( 1920 )
+    , mScreenHeight( 1080 )
+    , mFrameBufferWidth( 1920 )
+    , mFrameBufferHeight( 1080 )
 {
 
 }

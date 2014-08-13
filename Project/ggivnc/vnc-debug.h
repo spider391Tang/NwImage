@@ -34,8 +34,8 @@ static inline void
 debug(int level, const char *fmt, ...)
 {
 	va_list args;
-	if (g.debug < level)
-		return;
+    if ( 2 < level)
+        return;
 	va_start(args, fmt);
 	vfprintf(stderr, fmt, args);
 	va_end(args);

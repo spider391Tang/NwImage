@@ -49,7 +49,6 @@ HEADERS += \
 
 INCLUDEPATH += /opt/local/include
 # LIBS += -L../Hello -lHello
-LIBS += /Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/Hello/libHello.a
 #LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/ggivnc -lggivnc
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/NwImage3/build-Project-Desktop_Qt_5_3_clang_64bit-Debug/ggivnc/libggivnc.a
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/libgg.a

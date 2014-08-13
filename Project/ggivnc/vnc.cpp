@@ -113,13 +113,14 @@ extern "C" {
 
 #include <QDebug>
 #include <QImage>
-#include "../MLVNC/flyggi.h"
 #include "../MLVNC/MLVNC.h"
 #include "MLVNCBuffer.h"
 
 
-BufferRenderedSignalType gBufferRenderedEvent;
-unsigned char* gTargetFrameBuffer;
+static BufferRenderedSignalType gBufferRenderedEvent;
+static unsigned char* gTargetFrameBuffer = NULL;
+static std::string gPixformat = "r5g6b5";
+static std::string gColorDepth= "GT_16BIT";
 
 struct globals g;
 
@@ -1341,6 +1342,13 @@ create_wire_stem(void)
 #else
 	g.wire_stem = ggiOpen(target, NULL);
 
+        //std::string display = "display-memory:-pixfmt=";
+        //display += gPixformat; 
+        //display += " pointer";
+        //g.stem = e"display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
+        //qDebug() << "Display: " << display.c_str();
+        //g.wire_stem = ggiOpen( display.c_str(), NULL );
+
 	if (!g.wire_stem) {
 		free(target);
 		return -1;
@@ -1725,6 +1733,7 @@ vnc_not_implemented(void)
 {
 	debug(1, "Encoding not implemented\n");
 	exit(1);
+
 }
 #endif
 
@@ -3512,7 +3521,7 @@ open_visual(void)
 		return 0;
 
 	if (ggInit() < 0)
-		return -1;
+        return -1e
 	g.stem = ggNewStem(libgii, libggi, libggiwmh, NULL);
 	if (!g.stem)
 		goto err_ggexit;
@@ -3562,7 +3571,12 @@ open_visual(void)
 
     // Assign target frame buffer to ggi
     // Reference from http://manpages.ubuntu.com/manpages/intrepid/man7/display-memory.7.html
-    g.stem = ggiOpen("display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
+    std::string display = "display-memory:-pixfmt=";
+    display += gPixformat; 
+    display += " pointer";
+    //g.stem = e"display-memory:-pixfmt=r5g6b5 pointer", gTargetFrameBuffer );
+    qDebug() << "Display: " << display.c_str();
+    g.stem = ggiOpen( display.c_str(), gTargetFrameBuffer );
 	if( g.stem < 0 )
         goto err_ggiclose;
 
@@ -3763,8 +3777,16 @@ void setGgivncTargetFrameBuffer( unsigned char* buf )
     gTargetFrameBuffer = buf;
 }
 
-//int
-//ggivnc_main(int argc, char * const argv[])
+void setGgivncPixFormat( const std::string& pixformat )
+{
+    gPixformat = pixformat; 
+}
+
+void setGgivncColorDepth( const std::string& colorDepth )
+{
+    gColorDepth = colorDepth; 
+}
+
 int ggivnc_main(int argc, char **argv)
 {
 	int c;

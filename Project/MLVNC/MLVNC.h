@@ -73,10 +73,10 @@ public:
     void stopRender();
     void setUpdateFPS(int frame_per_second);
     void repaint();
-    void setFrameBufWidth(int width);
-    void setFrameBufHeight(int height);
-    //void setScreenWidth(int width);
-    //void setScreenHeight(int height);
+    void setFrameBufWidth( int width );
+    void setFrameBufHeight( int height );
+    void setScreenWidth( int width );
+    void setScreenHeight( int height );
     void setColorDepth( MLVNCColorDepth color_depth );
     void setColorFormat( MLVNCColorFormat color_format );
     void setFrameBufferPtr( unsigned char* buffer );
@@ -92,8 +92,10 @@ private:
     static MLVNC* mInstance;
     unsigned char* mFrameBuffer;
     VNCSignalType mVncEvent;
-    int mWidth;
-    int mHeight;
+    int mFrameBufferWidth;
+    int mFrameBufferHeight;
+    int mScreenWidth;
+    int mScreenHeight;
     MLVNCColorDepth mColorDepth;
     MLVNCColorFormat mColorFormat;
     std::string mHost;
