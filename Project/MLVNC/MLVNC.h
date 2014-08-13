@@ -24,7 +24,7 @@ class MLVNC: virtual public MLLibraryBase {
     //------------------------------------------------------------------------
     // Types 
     //------------------------------------------------------------------------
-    
+public:    
     typedef boost::signals2::signal <void()> VNCSignalType;
     typedef boost::function<void()> VNCHandler;
 
@@ -42,9 +42,9 @@ class MLVNC: virtual public MLLibraryBase {
 
     enum MLVNCColorFormat
     {
-       RGB565,
+       RGB16,   // RGB565
        RGB888,
-       RGB8888
+       RGB32    // XRGB8888
     };
 
     //------------------------------------------------------------------------
@@ -67,7 +67,7 @@ public:
 public:
     MLVNC();
     virtual ~MLVNC();
-    void connect(std::string& host, int port);
+    void connect( const std::string& aHost, int aPort = 5900 );
     void disconnect();
     void startRender();
     void stopRender();

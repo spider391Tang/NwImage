@@ -3787,7 +3787,7 @@ void setGgivncColorDepth( const std::string& colorDepth )
     gColorDepth = colorDepth; 
 }
 
-int ggivnc_main(int argc, char **argv)
+int ggivnc_main( int argc, char *argv[] )
 {
 	int c;
 	int status = 0;
