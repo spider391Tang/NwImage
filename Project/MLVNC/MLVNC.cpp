@@ -13,7 +13,7 @@ extern void setGgivncTargetFrameBuffer( unsigned char* buf );
 extern void setFlyggiTargetFrameBuffer( unsigned char* buf );
 extern void setGgivncPixFormat( const std::string& pixformat );
 extern void setFlyggiPixFormat( const std::string& pixformat );
-extern void setGgivncColorDepth( const std::string& colorDepth );
+extern void setGgivncRenderStop( bool stop );
 
 extern boost::signals2::connection connectToGgivncBufferRenderedSignal
     (
@@ -103,6 +103,7 @@ void MLVNC::startRender()
 
     qDebug() << "[MLVNC] startRender: " << ggiDefmode.c_str();
 
+    setGgivncRenderStop( false );
 
     std::string serverAddr( mHost + "::" + boost::lexical_cast<std::string>( mPort ) );
     char* ggivncArgv[] =
@@ -117,7 +118,7 @@ void MLVNC::startRender()
 
 void MLVNC::stopRender()
 {
-
+    setGgivncRenderStop( true );
 }
 
 void MLVNC::onHandleGgivncSignal()
@@ -145,6 +146,7 @@ void MLVNC::setScreenHeight( int height )
 {
     mScreenHeight = height;
 }
+
 boost::signals2::connection MLVNC::connectToMlvncEvent
     (
     const VNCSignalType::slot_type& aSlot

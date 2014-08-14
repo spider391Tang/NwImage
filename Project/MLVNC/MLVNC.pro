@@ -8,7 +8,8 @@ SOURCES += main.cpp \
     MLLibraryBase.cpp \
     MLVNC.cpp \
     VncThread.cpp \
-    VncImageProvider.cpp
+    VncImageProvider.cpp \
+    vncstop.cpp
 
 SOURCES += ../ggivnc/encoding/copyrect.c \
     ../ggivnc/encoding/corre.c \
@@ -45,7 +46,8 @@ HEADERS += \
     ../ggivnc/d3des.h \
     ../ggivnc/vnc.h \
     VncThread.h \
-    VncImageProvider.h
+    VncImageProvider.h \
+    vncstop.h
 
 
 INCLUDEPATH += /opt/local/include

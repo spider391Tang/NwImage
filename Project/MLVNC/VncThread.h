@@ -26,6 +26,7 @@ public:
         }
 
 public slots:
+    void stopRender();
     void startRender();
 
 private:

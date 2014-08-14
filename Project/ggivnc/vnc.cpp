@@ -120,7 +120,7 @@ extern "C" {
 static BufferRenderedSignalType gBufferRenderedEvent;
 static unsigned char* gTargetFrameBuffer = NULL;
 static std::string gPixformat = "p8b8g8r8";
-static std::string gColorDepth= "GT_32BIT";
+bool gGgiVncRenderStop = true;
 
 struct globals g;
 
@@ -2601,7 +2601,6 @@ loop(void)
 {
 	static uint8_t buttons;
 	static int x, y, wheel;
-	int done = 0;
 	int n;
 #ifdef HAVE_INPUT_FDSELECT
 	gii_event event;
@@ -2647,7 +2646,7 @@ again:
 		vnc_write(NULL, GII_FDSELECT_READY, &fd);
 	}
 	if (!mask) {
-		if (done)
+		if (gGgiVncRenderStop)
 			return 0;
 		goto again;
 	}
@@ -2684,11 +2683,11 @@ again:
 					break;
 				case -2:
 				case 2:
-					done = 1;
+					gGgiVncRenderStop = 1;
 					break;
 				case 3:
 					if (show_about() == -1)
-						done = 1;
+						gGgiVncRenderStop = 1;
 					break;
 				case 4:
 					transform_gii_key(1, GIIK_CtrlL);
@@ -2843,7 +2842,7 @@ again:
 				switch (event.fromapi.code) {
 				case GII_SLI_CODE_WMH_CLOSEREQUEST:
 					debug(1, "quiting\n");
-					done = 1;
+					gGgiVncRenderStop = 1;
 					break;
 #ifdef GGIWMHFLAG_CLIPBOARD_CHANGE
 				case GII_SLI_CODE_WMH_CLIPBOARD_CHANGE:
@@ -2861,7 +2860,7 @@ again:
 #endif
 	}
 
-	if (done)
+	if (gGgiVncRenderStop)
 		return 0;
 
 	if (req_event.any.size) {
@@ -3772,6 +3771,11 @@ boost::signals2::connection connectToGgivncBufferRenderedSignal
     return gBufferRenderedEvent.connect( aSlot );
 }
 
+void setGgivncRenderStop( bool stop )
+{
+    gGgiVncRenderStop = stop;
+}
+
 void setGgivncTargetFrameBuffer( unsigned char* buf )
 {
     gTargetFrameBuffer = buf;
@@ -3780,11 +3784,6 @@ void setGgivncTargetFrameBuffer( unsigned char* buf )
 void setGgivncPixFormat( const std::string& pixformat )
 {
     gPixformat = pixformat; 
-}
-
-void setGgivncColorDepth( const std::string& colorDepth )
-{
-    gColorDepth = colorDepth; 
 }
 
 int ggivnc_main( int argc, char *argv[] )

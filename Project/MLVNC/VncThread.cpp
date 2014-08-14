@@ -13,3 +13,9 @@ void VncThread::startRender()
 {
     MLLibrary::MLVNC::getInstance()->startRender();
 }
+
+void VncThread::stopRender()
+{
+    qDebug() << "[VncThread] stopRender";
+    MLLibrary::MLVNC::getInstance()->stopRender();
+}
