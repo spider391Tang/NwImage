@@ -3,7 +3,9 @@
 
    VNC viewer WMVi encoding.
 
-   Copyright (C) 2008 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2008-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -36,7 +39,7 @@
 #include "vnc-debug.h"
 
 int
-vnc_wmvi(void)
+vnc_wmvi(struct connection *cx)
 {
 	uint8_t *sinit;
 	uint16_t red_max;
@@ -47,14 +50,14 @@ vnc_wmvi(void)
 	int endian;
 	ggi_coord wire_size;
 
-	debug(2, "wmvi %dx%d\n", g.w, g.h);
+	debug(2, "wmvi %dx%d\n", cx->w, cx->h);
 
-	if (g.input.wpos < g.input.rpos + 16) {
-		g.action = vnc_wmvi;
+	if (cx->input.wpos < cx->input.rpos + 16) {
+		cx->action = vnc_wmvi;
 		return 0;
 	}
 
-	sinit = &g.input.data[g.input.rpos];
+	sinit = &cx->input.data[cx->input.rpos];
 
 	red_max = get16_hilo(&sinit[4]);
 	green_max = get16_hilo(&sinit[6]);
@@ -80,19 +83,20 @@ vnc_wmvi(void)
 
 	generate_pixfmt(pixfmt, sizeof(pixfmt), &server_ggi_pf);
 	if (!strcmp(pixfmt, "weird"))
-		exit(1);
+		return close_connection(cx, -1);
 
-	wire_size.x = g.w;
-	wire_size.y = g.h;
+	wire_size.x = cx->w;
+	wire_size.y = cx->h;
 
-	g.desktop_size = 1;
-	wire_mode_switch(pixfmt, endian, wire_size);
+	cx->desktop_size = 1;
+	if (wire_mode_switch(cx, pixfmt, endian, wire_size) < 0)
+		return close_connection(cx, -1);
 
-	g.input.rpos += 16;
+	cx->input.rpos += 16;
 
-	--g.rects;
+	--cx->rects;
 
-	remove_dead_data();
-	g.action = vnc_update_rect;
+	remove_dead_data(&cx->input);
+	cx->action = vnc_update_rect;
 	return 1;
 }

@@ -1,11 +1,11 @@
 /*
 ******************************************************************************
 
-   VNC viewer debug output handling.
+   VNC viewer handshake header.
 
    The MIT License
 
-   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
+   Copyright (C) 2008-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -28,34 +28,20 @@
 ******************************************************************************
 */
 
-#ifndef VNC_DEBUG_H
-#define VNC_DEBUG_H
+#ifndef HANDSHAKE_H
+#define HANDSHAKE_H
 
-#include <stdarg.h>
+const char *security_name(uint32_t type);
+int vnc_handle_security(struct connection *cx);
+int vnc_finish_handshake(struct connection *cx);
+int vnc_client_init(struct connection *cx);
+int vnc_security_result(struct connection *cx);
+int vnc_security_none(struct connection *cx);
+int vnc_auth(struct connection *cx);
+int vnc_security_tight_init(struct connection *cx);
+int vnc_security_tight(struct connection *cx);
+int vnc_security_vencrypt(struct connection *cx);
+void vnc_security_vencrypt_end(struct connection *cx, int keep_opt);
+int vnc_handshake(struct connection *cx);
 
-extern int ggivnc_debug_level;
-
-static inline void
-set_debug_level(int level)
-{
-	ggivnc_debug_level = level;
-}
-
-static inline int
-get_debug_level(void)
-{
-	return ggivnc_debug_level;
-}
-
-static inline void
-debug(int level, const char *fmt, ...)
-{
-	va_list args;
-	if (ggivnc_debug_level < level)
-		return;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-}
-
-#endif /* VNC_DEBUG_H */
+#endif /* HANDSHAKE_H */

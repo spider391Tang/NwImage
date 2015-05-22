@@ -1,11 +1,11 @@
 /*
 ******************************************************************************
 
-   Present an about dialog to the user using ggiwidgets.
+   Present a reconnection dialog to the user using ggiwidgets.
 
    The MIT License
 
-   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
+   Copyright (C) 2009, 2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -35,14 +35,32 @@
 #include <ggi/gii-events.h>
 #include <ggi/gii-keyboard.h>
 #include <ggi/ggi.h>
+#ifdef HAVE_WMH
+#include <ggi/wmh.h>
+#endif
 #include <ggi/ggi_widget.h>
 
 #include "vnc.h"
+#include "vnc-debug.h"
 #include "dialog.h"
-#include "ggivnc-icon.h"
+extern const uint8_t ggivnc_icon[];
+extern const uint8_t ggivnc_mask[];
+/* #include "ggivnc-icon.h" */
 
 static void
-about_close(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+reconnect_yes(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	int *done = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	*done = 2;
+}
+
+static void
+reconnect_no(ggi_widget_t widget, ggiWidgetCallbackType cbt,
 	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
 	int *done = widget->callbackpriv;
@@ -53,8 +71,30 @@ about_close(ggi_widget_t widget, ggiWidgetCallbackType cbt,
 	*done = 1;
 }
 
+struct timeout {
+	time_t stamp;
+	int *done;
+};
+
+static int
+timeout_hook(struct connection *cx, void *data)
+{
+	struct timeout *to = (struct timeout *)data;
+	struct timeval tv = { 1, 0 };
+
+	if (!cx->auto_reconnect)
+		return 0;
+
+	if (time(NULL) > to->stamp + 2) {
+		debug(1, "auto-reconnect\n");
+		*to->done = 2;
+		return 1;
+	}
+	return !giiEventPoll(cx->stem, emAll, &tv);
+}
+
 int
-show_about(struct connection *cx)
+show_reconnect(struct connection *cx, int popup)
 {
 	ggi_widget_t item;
 	ggi_widget_t line;
@@ -66,6 +106,11 @@ show_about(struct connection *cx)
 		GWT_IF_BITMAP, ggivnc_mask
 	};
 	int done = 0;
+	struct timeout to = { 0, NULL };
+
+	to.done = &done;
+
+	debug(2, "show_reconnect\n");
 
 	dlg = ggiWidgetCreateContainerStack(2, NULL);
 	if (!dlg)
@@ -86,88 +131,22 @@ show_about(struct connection *cx)
 		goto destroy_dlg;
 	ggiWidgetLinkChild(line, GWT_LAST_CHILD, item);
 
-	item = ggiWidgetCreateLabel("Written by Peter Rosin");
+	item = ggiWidgetCreateLabel("The connection has been closed.");
 	if (!item)
 		goto destroy_dlg;
 	item->pad.b = 5;
 	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("Uses libraries from");
+	item = ggiWidgetCreateLabel("Do you wish to reconnect?");
 	if (!item)
 		goto destroy_dlg;
 	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("the GGI project");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#ifdef HAVE_ZLIB
-	item = ggiWidgetCreateLabel("and the zlib library by");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("Jean-loup Gailly and Mark Adler");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#ifdef HAVE_JPEG
-#if defined HAVE_TURBOJPEG
-	item = ggiWidgetCreateLabel("and the TurboJPEG library by");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("Julian Smart, Robert Roebling et al");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("which may use the jpeg library from");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#elif defined HAVE_JPEGLIB
-	item = ggiWidgetCreateLabel("and the jpeg library from");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#endif
-	item = ggiWidgetCreateLabel("the Independent JPEG Group\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#endif /* HAVE_JPEG */
-#endif /* HAVE_ZLIB */
-#ifdef HAVE_OPENSSL
-	item = ggiWidgetCreateLabel("This product includes software\n");
-	if (!item)
-		goto destroy_dlg;
-	item->pad.t = 5;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("developed by the OpenSSL Project\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("for use in the OpenSSL Toolkit.\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("(http://www.openssl.org/)\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("This product includes crypto-\n");
-	if (!item)
-		goto destroy_dlg;
-	item->pad.t = 5;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("graphic software written by\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-	item = ggiWidgetCreateLabel("Eric Young (eay@cryptsoft.com)\n");
-	if (!item)
-		goto destroy_dlg;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, item);
-#endif
 	item->pad.b = 5;
-	item = ggiWidgetCreateLabel("OK");
+
+	line = ggiWidgetCreateContainerLine(20, NULL);
+	if (!line)
+		goto destroy_dlg;
+	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, line);
+	item = ggiWidgetCreateLabel("Yes");
 	if (!item)
 		goto destroy_dlg;
 	item->pad.t = item->pad.b = 3;
@@ -177,16 +156,77 @@ show_about(struct connection *cx)
 		ggiWidgetDestroy(item);
 		goto destroy_dlg;
 	}
-	button->callback = about_close;
+	button->callback = reconnect_yes;
 	button->callbackpriv = &done;
-	ggiWidgetLinkChild(dlg, GWT_LAST_CHILD, button);
+	ggiWidgetLinkChild(line, GWT_LAST_CHILD, button);
 	ggiWidgetFocus(button, NULL, NULL);
+	item = ggiWidgetCreateLabel("No");
+	if (!item)
+		goto destroy_dlg;
+	item->pad.t = item->pad.b = 3;
+	item->pad.l = item->pad.r = 12;
+	button = ggiWidgetCreateButton(item);
+	if (!button) {
+		ggiWidgetDestroy(item);
+		goto destroy_dlg;
+	}
+	button->callback = reconnect_no;
+	button->callbackpriv = &done;
+	button->hotkey.sym = GIIUC_Escape;
+	ggiWidgetLinkChild(line, GWT_LAST_CHILD, button);
 
-	dlg = popup_dialog(cx, dlg, &done, NULL, NULL);
-	if (!dlg)
-		return 0;
+	to.stamp = time(NULL);
+	if (popup) {
+		dlg = popup_dialog(cx, dlg, &done, timeout_hook, &to);
+		goto destroy_dlg;
+	}
+
+	{
+		ggi_widget_t res = attach_and_fit_visual(cx, dlg, NULL, NULL);
+
+		if (!res)
+			goto out;
+		if (set_title(cx))
+			goto out;
+		dlg = res;
+	}
+
+	ggiWidgetRedrawWidgets(cx->visualanchor);
+
+	while (!done) {
+		gii_event event;
+		if (timeout_hook(cx, &to))
+			continue;
+		giiEventRead(cx->stem, &event, emAll);
+
+#ifdef GGIWMHFLAG_CATCH_CLOSE
+		switch (event.any.type) {
+		case evFromAPI:
+			if (event.fromapi.api_id == libggiwmh->id) {
+				switch (event.fromapi.code) {
+				case GII_SLI_CODE_WMH_CLOSEREQUEST:
+					debug(1, "quiting\n");
+					done = 1;
+					break;
+				}
+			}
+			break;
+		}
+#endif
+
+		ggiWidgetProcessEvent(cx->visualanchor, &event);
+		ggiWidgetRedrawWidgets(cx->visualanchor);
+	}
+
+out:
+	if (dlg) {
+		ggiWidgetUnlinkChild(cx->visualanchor,
+			GWT_UNLINK_BY_WIDGETPTR, dlg);
+	}
+	if (done <= 1)
+		close_visual(cx);
 
 destroy_dlg:
 	ggiWidgetDestroy(dlg);
-	return done;
+	return done - 1;
 }

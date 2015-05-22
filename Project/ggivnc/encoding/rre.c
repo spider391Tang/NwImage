@@ -3,7 +3,9 @@
 
    VNC viewer RRE encoding.
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -28,208 +31,250 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <ggi/ggi.h>
 
 #include "vnc.h"
 #include "vnc-endian.h"
 #include "vnc-debug.h"
 
-struct rre_t {
+struct rre {
 	int32_t rects;
 	ggi_visual_t stem;
 };
 
-static struct rre_t rre;
+static int
+rre_stem_change(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+
+	rre->stem = cx->wire_stem ? cx->wire_stem : cx->stem;
+	return 0;
+}
+
+static int
+vnc_rre_rect_8(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+	uint16_t x, y, w, h;
+
+	while (rre->rects) {
+		if (cx->input.wpos < cx->input.rpos + 9) {
+			cx->action = vnc_rre_rect_8;
+			return 0;
+		}
+
+		pixel = cx->input.data[cx->input.rpos++];
+		x = get16_hilo(&cx->input.data[cx->input.rpos + 0]);
+		y = get16_hilo(&cx->input.data[cx->input.rpos + 2]);
+		w = get16_hilo(&cx->input.data[cx->input.rpos + 4]);
+		h = get16_hilo(&cx->input.data[cx->input.rpos + 6]);
+		cx->input.rpos += 8;
+
+		ggiSetGCForeground(rre->stem, pixel);
+		ggiDrawBox(rre->stem, cx->x + x, cx->y + y, w, h);
+		--rre->rects;
+	}
+
+	--cx->rects;
+
+	remove_dead_data(&cx->input);
+	cx->action = vnc_update_rect;
+	return 1;
+}
+
+static int
+vnc_rre_8(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+
+	if (cx->input.wpos < cx->input.rpos + 1) {
+		cx->action = vnc_rre_8;
+		return 0;
+	}
+
+	pixel = cx->input.data[cx->input.rpos++];
+
+	ggiSetGCForeground(rre->stem, pixel);
+	ggiDrawBox(rre->stem, cx->x, cx->y, cx->w, cx->h);
+
+	return vnc_rre_rect_8(cx);
+}
+
+static int
+vnc_rre_rect_16(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+	uint16_t x, y, w, h;
+
+	while (rre->rects) {
+		if (cx->input.wpos < cx->input.rpos + 10) {
+			cx->action = vnc_rre_rect_16;
+			return 0;
+		}
+
+		if (cx->wire_endian != cx->local_endian)
+			pixel = get16_r(&cx->input.data[cx->input.rpos]);
+		else
+			pixel = get16(&cx->input.data[cx->input.rpos]);
+		cx->input.rpos += 2;
+		x = get16_hilo(&cx->input.data[cx->input.rpos + 0]);
+		y = get16_hilo(&cx->input.data[cx->input.rpos + 2]);
+		w = get16_hilo(&cx->input.data[cx->input.rpos + 4]);
+		h = get16_hilo(&cx->input.data[cx->input.rpos + 6]);
+		cx->input.rpos += 8;
+
+		ggiSetGCForeground(rre->stem, pixel);
+		ggiDrawBox(rre->stem, cx->x + x, cx->y + y, w, h);
+		--rre->rects;
+	}
+
+	--cx->rects;
+
+	remove_dead_data(&cx->input);
+	cx->action = vnc_update_rect;
+	return 1;
+}
+
+static int
+vnc_rre_16(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+
+	if (cx->input.wpos < cx->input.rpos + 2) {
+		cx->action = vnc_rre_16;
+		return 0;
+	}
+
+	if (cx->wire_endian != cx->local_endian)
+		pixel = get16_r(&cx->input.data[cx->input.rpos]);
+	else
+		pixel = get16(&cx->input.data[cx->input.rpos]);
+	cx->input.rpos += 2;
+
+	ggiSetGCForeground(rre->stem, pixel);
+	ggiDrawBox(rre->stem, cx->x, cx->y, cx->w, cx->h);
+
+	return vnc_rre_rect_16(cx);
+}
+
+static int
+vnc_rre_rect_32(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+	uint16_t x, y, w, h;
+
+	while (rre->rects) {
+		if (cx->input.wpos < cx->input.rpos + 12) {
+			cx->action = vnc_rre_rect_32;
+			return 0;
+		}
+
+		if (cx->wire_endian != cx->local_endian)
+			pixel = get32_r(&cx->input.data[cx->input.rpos]);
+		else
+			pixel = get32(&cx->input.data[cx->input.rpos]);
+		cx->input.rpos += 4;
+		x = get16_hilo(&cx->input.data[cx->input.rpos + 0]);
+		y = get16_hilo(&cx->input.data[cx->input.rpos + 2]);
+		w = get16_hilo(&cx->input.data[cx->input.rpos + 4]);
+		h = get16_hilo(&cx->input.data[cx->input.rpos + 6]);
+		cx->input.rpos += 8;
+
+		ggiSetGCForeground(rre->stem, pixel);
+		ggiDrawBox(rre->stem, cx->x + x, cx->y + y, w, h);
+		--rre->rects;
+	}
+
+	--cx->rects;
+
+	remove_dead_data(&cx->input);
+	cx->action = vnc_update_rect;
+	return 1;
+}
+
+static int
+vnc_rre_32(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+	ggi_pixel pixel;
+
+	if (cx->input.wpos < cx->input.rpos + 4) {
+		cx->action = vnc_rre_32;
+		return 0;
+	}
+
+	if (cx->wire_endian != cx->local_endian)
+		pixel = get32_r(&cx->input.data[cx->input.rpos]);
+	else
+		pixel = get32(&cx->input.data[cx->input.rpos]);
+	cx->input.rpos += 4;
+
+	debug(3, "rre rects %d bg=%08x\n", rre->rects, pixel);
+
+	ggiSetGCForeground(rre->stem, pixel);
+	ggiDrawBox(rre->stem, cx->x, cx->y, cx->w, cx->h);
+
+	return vnc_rre_rect_32(cx);
+}
+
+static int
+rre_rect(struct connection *cx)
+{
+	struct rre *rre = cx->encoding_def[rre_encoding].priv;
+
+	debug(2, "rre\n");
+
+	if (cx->input.wpos < cx->input.rpos + 4)
+		return 0;
+
+	rre->rects = get32_hilo(&cx->input.data[cx->input.rpos]);
+	cx->input.rpos += 4;
+
+	cx->stem_change = rre_stem_change;
+	cx->stem_change(cx);
+
+	switch (GT_SIZE(cx->wire_mode.graphtype) / 8) {
+	case 1: return vnc_rre_8(cx);
+	case 2: return vnc_rre_16(cx);
+	case 4: return vnc_rre_32(cx);
+	}
+	return 1;
+}
 
 static void
-rre_stem_change(void)
+rre_end(struct connection *cx)
 {
-	rre.stem = g.wire_stem ? g.wire_stem : g.stem;
-}
+	if (!cx->encoding_def[rre_encoding].priv)
+		return;
 
-static int
-vnc_rre_rect_8(void)
-{
-	ggi_pixel pixel;
-	uint16_t x, y, w, h;
+	debug(1, "rre_end\n");
 
-	while (rre.rects) {
-		if (g.input.wpos < g.input.rpos + 9) {
-			g.action = vnc_rre_rect_8;
-			return 0;
-		}
-
-		pixel = g.input.data[g.input.rpos++];
-		x = get16_hilo(&g.input.data[g.input.rpos + 0]);
-		y = get16_hilo(&g.input.data[g.input.rpos + 2]);
-		w = get16_hilo(&g.input.data[g.input.rpos + 4]);
-		h = get16_hilo(&g.input.data[g.input.rpos + 6]);
-		g.input.rpos += 8;
-
-		ggiSetGCForeground(rre.stem, pixel);
-		ggiDrawBox(rre.stem, g.x + x, g.y + y, w, h);
-		--rre.rects;
-	}
-
-	--g.rects;
-
-	remove_dead_data();
-	g.action = vnc_update_rect;
-	return 1;
-}
-
-static int
-vnc_rre_8(void)
-{
-	ggi_pixel pixel;
-
-	if (g.input.wpos < g.input.rpos + 1) {
-		g.action = vnc_rre_8;
-		return 0;
-	}
-
-	pixel = g.input.data[g.input.rpos++];
-
-	ggiSetGCForeground(rre.stem, pixel);
-	ggiDrawBox(rre.stem, g.x, g.y, g.w, g.h);
-
-	return vnc_rre_rect_8();
-}
-
-static int
-vnc_rre_rect_16(void)
-{
-	ggi_pixel pixel;
-	uint16_t x, y, w, h;
-
-	while (rre.rects) {
-		if (g.input.wpos < g.input.rpos + 10) {
-			g.action = vnc_rre_rect_16;
-			return 0;
-		}
-
-		if (g.wire_endian != g.local_endian)
-			pixel = get16_r(&g.input.data[g.input.rpos]);
-		else
-			pixel = get16(&g.input.data[g.input.rpos]);
-		g.input.rpos += 2;
-		x = get16_hilo(&g.input.data[g.input.rpos + 0]);
-		y = get16_hilo(&g.input.data[g.input.rpos + 2]);
-		w = get16_hilo(&g.input.data[g.input.rpos + 4]);
-		h = get16_hilo(&g.input.data[g.input.rpos + 6]);
-		g.input.rpos += 8;
-
-		ggiSetGCForeground(rre.stem, pixel);
-		ggiDrawBox(rre.stem, g.x + x, g.y + y, w, h);
-		--rre.rects;
-	}
-
-	--g.rects;
-
-	remove_dead_data();
-	g.action = vnc_update_rect;
-	return 1;
-}
-
-static int
-vnc_rre_16(void)
-{
-	ggi_pixel pixel;
-
-	if (g.input.wpos < g.input.rpos + 2) {
-		g.action = vnc_rre_16;
-		return 0;
-	}
-
-	if (g.wire_endian != g.local_endian)
-		pixel = get16_r(&g.input.data[g.input.rpos]);
-	else
-		pixel = get16(&g.input.data[g.input.rpos]);
-	g.input.rpos += 2;
-
-	ggiSetGCForeground(rre.stem, pixel);
-	ggiDrawBox(rre.stem, g.x, g.y, g.w, g.h);
-
-	return vnc_rre_rect_16();
-}
-
-static int
-vnc_rre_rect_32(void)
-{
-	ggi_pixel pixel;
-	uint16_t x, y, w, h;
-
-	while (rre.rects) {
-		if (g.input.wpos < g.input.rpos + 12) {
-			g.action = vnc_rre_rect_32;
-			return 0;
-		}
-
-		if (g.wire_endian != g.local_endian)
-			pixel = get32_r(&g.input.data[g.input.rpos]);
-		else
-			pixel = get32(&g.input.data[g.input.rpos]);
-		g.input.rpos += 4;
-		x = get16_hilo(&g.input.data[g.input.rpos + 0]);
-		y = get16_hilo(&g.input.data[g.input.rpos + 2]);
-		w = get16_hilo(&g.input.data[g.input.rpos + 4]);
-		h = get16_hilo(&g.input.data[g.input.rpos + 6]);
-		g.input.rpos += 8;
-
-		ggiSetGCForeground(rre.stem, pixel);
-		ggiDrawBox(rre.stem, g.x + x, g.y + y, w, h);
-		--rre.rects;
-	}
-
-	--g.rects;
-
-	remove_dead_data();
-	g.action = vnc_update_rect;
-	return 1;
-}
-
-static int
-vnc_rre_32(void)
-{
-	ggi_pixel pixel;
-
-	if (g.input.wpos < g.input.rpos + 4) {
-		g.action = vnc_rre_32;
-		return 0;
-	}
-
-	if (g.wire_endian != g.local_endian)
-		pixel = get32_r(&g.input.data[g.input.rpos]);
-	else
-		pixel = get32(&g.input.data[g.input.rpos]);
-	g.input.rpos += 4;
-
-	debug(3, "rre rects %d bg=%08x\n", rre.rects, pixel);
-
-	ggiSetGCForeground(rre.stem, pixel);
-	ggiDrawBox(rre.stem, g.x, g.y, g.w, g.h);
-
-	return vnc_rre_rect_32();
+	free(cx->encoding_def[rre_encoding].priv);
+	cx->encoding_def[rre_encoding].priv = NULL;
+	cx->encoding_def[rre_encoding].action = vnc_rre;
 }
 
 int
-vnc_rre(void)
+vnc_rre(struct connection *cx)
 {
-	debug(2, "rre\n");
+	struct rre *rre;
 
-	if (g.input.wpos < g.input.rpos + 4)
-		return 0;
+	debug(1, "rre init\n");
 
-	rre.rects = get32_hilo(&g.input.data[g.input.rpos]);
-	g.input.rpos += 4;
+	rre = malloc(sizeof(*rre));
+	if (!rre)
+		return close_connection(cx, -1);
+	memset(rre, 0, sizeof(*rre));
 
-	g.stem_change = rre_stem_change;
-	g.stem_change();
+	cx->encoding_def[rre_encoding].priv = rre;
+	cx->encoding_def[rre_encoding].end = rre_end;
 
-	switch (GT_SIZE(g.wire_mode.graphtype) / 8) {
-	case 1: return vnc_rre_8();
-	case 2: return vnc_rre_16();
-	case 4: return vnc_rre_32();
-	}
-	return 1;
+	cx->action = cx->encoding_def[rre_encoding].action = rre_rect;
+	return cx->action(cx);
 }

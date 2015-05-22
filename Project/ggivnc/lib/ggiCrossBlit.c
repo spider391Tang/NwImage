@@ -1,11 +1,12 @@
 /*
 ******************************************************************************
 
-   VNC viewer debug output handling.
+   Safe ggiCrossBlit for ggivnc, the ggiCrossBlit from GGI 2.x does not
+   clip against the source visual.
 
    The MIT License
 
-   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
+   Copyright (C) 2008-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -28,34 +29,35 @@
 ******************************************************************************
 */
 
-#ifndef VNC_DEBUG_H
-#define VNC_DEBUG_H
+#include "config.h"
 
-#include <stdarg.h>
+#include "vnc.h"
+#include "vnc-compat.h"
 
-extern int ggivnc_debug_level;
-
-static inline void
-set_debug_level(int level)
+int
+ggiCrossBlit(ggi_visual_t src, int sx, int sy, int w, int h,
+	ggi_visual_t dst, int dx, int dy)
 {
-	ggivnc_debug_level = level;
+	ggi_mode mode;
+	ggiGetMode(src, &mode);
+	if (sx < 0) {
+		w += sx;
+		dx += sx;
+		sx = 0;
+	}
+	if (sx + w > mode.virt.x)
+		w = mode.virt.x - sx;
+	if (w < 0)
+		return 0;
+	if (sy < 0) {
+		h += sy;
+		dy += sy;
+		sy = 0;
+	}
+	if (sy + h > mode.virt.y)
+		h = mode.virt.y - sy;
+	if (h < 0)
+		return 0;
+#undef ggiCrossBlit /* now safe to call the real ggiCrossBlit */
+	return ggiCrossBlit(src, sx, sy, w, h, dst, dx, dy);
 }
-
-static inline int
-get_debug_level(void)
-{
-	return ggivnc_debug_level;
-}
-
-static inline void
-debug(int level, const char *fmt, ...)
-{
-	va_list args;
-	if (ggivnc_debug_level < level)
-		return;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-}
-
-#endif /* VNC_DEBUG_H */

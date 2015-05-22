@@ -1,7 +1,7 @@
 /*
 ******************************************************************************
 
-   VNC viewer debug output handling.
+   VNC viewer security type none.
 
    The MIT License
 
@@ -28,34 +28,19 @@
 ******************************************************************************
 */
 
-#ifndef VNC_DEBUG_H
-#define VNC_DEBUG_H
+#include "config.h"
 
-#include <stdarg.h>
+#include "vnc.h"
+#include "handshake.h"
 
-extern int ggivnc_debug_level;
 
-static inline void
-set_debug_level(int level)
+int
+vnc_security_none(struct connection *cx)
 {
-	ggivnc_debug_level = level;
+	if (cx->protocol <= 7)
+		/* No security result */
+		cx->action = vnc_client_init;
+	else
+		cx->action = vnc_security_result;
+	return 1;
 }
-
-static inline int
-get_debug_level(void)
-{
-	return ggivnc_debug_level;
-}
-
-static inline void
-debug(int level, const char *fmt, ...)
-{
-	va_list args;
-	if (ggivnc_debug_level < level)
-		return;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-}
-
-#endif /* VNC_DEBUG_H */

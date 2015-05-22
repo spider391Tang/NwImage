@@ -3,7 +3,9 @@
 
    VNC viewer open connection dialog handling.
 
-   Copyright (C) 2007, 2008 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -29,6 +32,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #include <math.h>
 #include <ggi/gg.h>
 #include <ggi/gii.h>
@@ -44,18 +50,18 @@
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
 
 #include "vnc.h"
+#include "handshake.h"
+#include "vnc-compat.h"
 #include "vnc-debug.h"
 #include "dialog.h"
 
-struct move_encodings_t {
-	int32_t encoding;
-	ggi_widget_t to;
-	ggi_widget_t from;
-};
-
 struct ctx {
+	struct connection *cx;
 	int done;
 	int pixfmt[4];
 	int pf_opt;
@@ -63,119 +69,162 @@ struct ctx {
 	int endian_opt;
 	int protocol_opt;
 	int family_opt;
+	int expert;
+	ggi_widget_t dialog;
+	ggi_widget_t connect;
+	ggi_widget_t tab;
+	ggi_widget_t security_page;
+	ggi_widget_t encoding_page;
+};
+
+struct move_encodings {
+	struct ctx *ctx;
+	int32_t encoding;
+	const char *label;
+	ggi_widget_t to;
+	ggi_widget_t from;
+	int free_cb_priv;
 };
 
 
 static void
-cb_ok(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+cb_ok(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
 	struct ctx *ctx = widget->callbackpriv;
-	char server[1024];
+	struct connection *cx = ctx->cx;
 
-	if (cbt != GWT_CB_ACTIVATE)
+	if (!cx->server_port[0]) {
+		ggiWidgetSetTreeState(ctx->connect, GWT_STATE_INACTIVE, 1);
 		return;
+	}
 
-	if (!g.server[0])
+	if (cbt != GWT_CB_ACTIVATE) {
+		ggiWidgetSetTreeState(ctx->connect, GWT_STATE_INACTIVE, 0);
 		return;
+	}
 
-	strcpy(server, g.server);
-	if (parse_port())
-		goto fixup;
+	switch (parse_port(cx)) {
+	case -2:
+		ctx->done = -2;
+		return;
+	case -1:
+		return;
+	}
 
 	if (ctx->pixfmt[0])
-		strcpy(g.wire_pixfmt, "local");
+		strcpy(cx->wire_pixfmt, "local");
 	else if (ctx->pixfmt[1])
-		strcpy(g.wire_pixfmt, "server");
+		strcpy(cx->wire_pixfmt, "server");
 	else if (ctx->pixfmt[2]) {
 		switch(ctx->pf_opt) {
 		case 0:
-			strcpy(g.wire_pixfmt, "p5r1g1b1");
+			strcpy(cx->wire_pixfmt, "p5r1g1b1");
 			break;
 		case 1:
-			strcpy(g.wire_pixfmt, "p2r2g2b2");
+			strcpy(cx->wire_pixfmt, "p2r2g2b2");
 			break;
 		case 2:
-			strcpy(g.wire_pixfmt, "r3g3b2");
+			strcpy(cx->wire_pixfmt, "r3g3b2");
 			break;
 		case 3:
-			strcpy(g.wire_pixfmt, "c8");
+			strcpy(cx->wire_pixfmt, "c8");
 			break;
 		case 4:
-			strcpy(g.wire_pixfmt, "p1r5g5b5");
+			strcpy(cx->wire_pixfmt, "p1r5g5b5");
 			break;
 		case 5:
-			strcpy(g.wire_pixfmt, "r5g6b5");
+			strcpy(cx->wire_pixfmt, "r5g6b5");
 			break;
 		case 6:
-			strcpy(g.wire_pixfmt, "p8r8g8b8");
+			strcpy(cx->wire_pixfmt, "p8r8g8b8");
 			break;
 		default:
-			goto fixup;
+			return;
 		}
 	}
 	else if (ctx->pixfmt[3]) {
-		ggstrlcpy(g.wire_pixfmt, ctx->pf_custom,
-			sizeof(g.wire_pixfmt));
-		if (canonicalize_pixfmt(g.wire_pixfmt, sizeof(g.wire_pixfmt)))
-			goto fixup;
+		ggstrlcpy(cx->wire_pixfmt, ctx->pf_custom,
+			sizeof(cx->wire_pixfmt));
+		if (canonicalize_pixfmt(cx->wire_pixfmt,
+			sizeof(cx->wire_pixfmt)))
+		{
+			return;
+		}
 	}
 	else
-		goto fixup;
+		return;
 
 	switch (ctx->endian_opt) {
 	case 0:
-		g.wire_endian = -2;
+		cx->wire_endian = -2;
 		break;
 	case 1:
-		g.wire_endian = -3;
+		cx->wire_endian = -3;
 		break;
 	case 2:
-		g.wire_endian = 1;
+		cx->wire_endian = 1;
 		break;
 	case 3:
-		g.wire_endian = 0;
+		cx->wire_endian = 0;
 		break;
 	default:
-		goto fixup;
+		return;
 	}
 
 	switch (ctx->protocol_opt) {
 	case 0:
-		g.max_protocol = 3;
+		cx->max_protocol = 3;
 		break;
 	case 1:
-		g.max_protocol = 7;
+		cx->max_protocol = 7;
 		break;
 	case 2:
-		g.max_protocol = 8;
+		cx->max_protocol = 8;
 		break;
 	default:
-		goto fixup;
+		return;
 	}
 
 	switch (ctx->family_opt) {
 	case 0:
-		g.net_family = 0;
+		cx->net_family = 0;
 		break;
 	case 1:
-		g.net_family = 4;
+		cx->net_family = 4;
 		break;
 	case 2:
-		g.net_family = 6;
+		cx->net_family = 6;
 		break;
 	default:
-		goto fixup;
+		return;
 	}
 
 	ctx->done = 1;
-	return;
-
-fixup:
-	strcpy(g.server, server);
 }
 
 static void
-cb_cancel(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+cb_about(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+	struct connection *cx = ctx->cx;
+	ggi_widget_t visualanchor = cx->visualanchor;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ggiWidgetUnlinkChild(visualanchor, 0);
+	show_about(cx);
+	ggiWidgetLinkChild(visualanchor, GWT_BY_XYPOS, ctx->dialog,
+		0, 0,
+		cx->mode.visible.x, cx->mode.visible.y,
+		0);
+}
+
+static void
+cb_cancel(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
 	struct ctx *ctx = widget->callbackpriv;
 
@@ -185,27 +234,80 @@ cb_cancel(ggi_widget_t widget, ggiWidgetCallbackType cbt)
 	ctx->done = -1;
 }
 
-static void move_encodings(ggi_widget_t widget, ggiWidgetCallbackType cbt);
+struct tab_ctrl {
+	ggi_widget_t tab;
+	ggi_widget_t sheet;
+};
+
+static void
+cb_page(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct tab_ctrl *tab_ctrl = widget->callbackpriv;
+	ggi_widget_t tab = tab_ctrl->tab;
+	ggi_widget_t sheet = tab_ctrl->sheet;
+	ggi_widget_t btn;
+	int *page_number = sheet->statevar;
+	int i;
+
+	if (cbt != GWT_CB_STATECHANGE)
+		return;
+
+	for (i = 0; (btn = ggiWidgetGetChild(tab, i)); ++i) {
+		if (btn == widget)
+			break;
+	}
+	if (!btn)
+		return;
+
+	*page_number = i;
+	GWT_SET_ICHANGED(sheet);
+}
+
+static inline ggi_widget_t
+cleanup(ggi_widget_t widget)
+{
+	ggiWidgetDestroy(widget);
+	return NULL;
+}
+
+static inline void
+link_last_child(ggi_widget_t widget, ggi_widget_t child)
+{
+	ggiWidgetLinkChild(widget, GWT_LAST_CHILD, child);
+}
+
+static void 
+cb_move_encodings(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus);
 
 static ggi_widget_t
-create_item(int32_t encoding, ggi_widget_t to, ggi_widget_t from,
-	struct move_encodings_t *me)
+create_item(struct ctx *ctx, int32_t encoding, const char *label,
+	ggi_widget_t to, ggi_widget_t from, struct move_encodings *me)
 {
 	ggi_widget_t item;
 
-	item = ggiWidgetCreateLabel(lookup_encoding(encoding));
+	item = ggiWidgetCreateLabel(label);
+	if (!item)
+		return NULL;
 	item->gravity = GWT_GRAV_WEST;
 	item->pad.t = item->pad.l = 1;
 	item->pad.b = item->pad.r = 1;
 
-	if (!me)
+	if (!me) {
 		me = malloc(sizeof(*me));
+		if (!me)
+			return cleanup(item);
+	}
+	me->ctx = ctx;
 	me->encoding = encoding;
+	me->label = label;
 	me->to = to;
 	me->from = from;
+	me->free_cb_priv = 1;
 
 	item->callbackpriv = me;
-	item->callback = move_encodings;
+	item->callback = cb_move_encodings;
 
 	item->state |= GWT_STATE_IS_SELECTABLE;
 
@@ -213,13 +315,20 @@ create_item(int32_t encoding, ggi_widget_t to, ggi_widget_t from,
 }
 
 static void
-move_encodings(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+cb_move_encodings(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	struct move_encodings_t *move = widget->callbackpriv;
+	struct move_encodings *move = widget->callbackpriv;
 	int i;
 	ggi_widget_t child, list;
 	ggi_widget_t to, from;
-	struct move_encodings_t *me;
+	struct move_encodings *me;
+
+	if (cbt == GWT_CB_DESTROY) {
+		if (move && move->free_cb_priv)
+			free(move);
+		return;
+	}
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
@@ -227,149 +336,277 @@ move_encodings(ggi_widget_t widget, ggiWidgetCallbackType cbt)
 	to = move->to;
 	from = move->from;
 
-	i = 0;
+	i = -1;
 	for (;;) {
-		child = from->getchild(from, i);
+		child = ggiWidgetGetChild(from, ++i);
 		if (!child)
 			break;
 
-		if (!(child->state & GWT_STATE_IS_SELECTED)) {
-			++i;
+		if (!(child->state & GWT_STATE_IS_SELECTED))
 			continue;
-		}
+
+		to->pad.b -= child->min.y;
+		from->pad.b += child->min.y;
 
 		me = child->callbackpriv;
+		me->free_cb_priv = 0;
 
 		ggiWidgetSendControl(from, GWT_CONTROLFLAG_NONE,
-			"DELETEROW", i);
-		SET_ICHANGED(from);
+			"DELETEROW", i--);
+		GWT_SET_ICHANGED(from);
 
-		list = create_item(me->encoding, me->from, me->to, me);
+		list = create_item(me->ctx, me->encoding, me->label,
+			me->from, me->to, me);
+		if (!list) {
+			me->ctx->done = -2;
+			return;
+		}
 
 		ggiWidgetSendControl(to, GWT_CONTROLFLAG_NONE,
-			"INSERTROW", LAST_CHILD);
-		to->linkchild(to, LAST_CHILD, list);
-		SET_ICHANGED(to);
+			"INSERTROW", GWT_LAST_CHILD);
+		link_last_child(to, list);
+		GWT_SET_ICHANGED(to);
 	}
 }
 
+static void
+cb_expert(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+	int *expert = widget->statevar;
+	ggi_widget_t item;
+	ggi_widget_t list = ctx->tab->parent;
+
+	if (cbt != GWT_CB_STATECHANGE)
+		return;
+
+	if (*expert) {
+		if (ggiWidgetGetChild(ctx->tab, 1) == ctx->security_page)
+			return;
+
+		ggiWidgetLinkChild(ctx->tab, 1, ctx->security_page);
+		ggiWidgetLinkChild(ctx->tab, 2, ctx->encoding_page);
+
+		item = ggiWidgetUnlinkChild(list, GWT_LAST_CHILD);
+		ggiWidgetDestroy(item);
+
+		item = ggiWidgetCreateColoredPatch(10, 2,
+			&(ggiWidgetGetPalette(list)
+				->col[GWT_COLOR_SHADOW_LIGHT]));
+		if (!item) {
+			ctx->done = -2;
+			return;
+		}
+		item->gravity = GWT_GRAV_SOUTH;
+		link_last_child(list, item);
+	}
+	else {
+		if (ggiWidgetGetChild(ctx->tab, 1) != ctx->security_page)
+			return;
+
+		item = ggiWidgetCreateLabel("");
+		if (!item) {
+			ctx->done = -2;
+			return;
+		}
+		ggiWidgetLinkChild(ctx->tab, 1, item);
+		item = ggiWidgetCreateLabel("");
+		if (!item) {
+			ctx->done = -2;
+			return;
+		}
+		ggiWidgetLinkChild(ctx->tab, 2, item);
+
+		item = ggiWidgetUnlinkChild(list, GWT_LAST_CHILD);
+		ggiWidgetDestroy(item);
+
+		item = ggiWidgetCreateColoredPatch(
+			10 + ctx->security_page->min.x +
+				ctx->encoding_page->min.x,
+			2, &(ggiWidgetGetPalette(list)
+				->col[GWT_COLOR_SHADOW_LIGHT]));
+		if (!item) {
+			ctx->done = -2;
+			return;
+		}
+		item->gravity = GWT_GRAV_SOUTH;
+		link_last_child(list, item);
+	}
+
+	item = ggiWidgetUnlinkChild(ctx->tab, 3);
+	if (item != ctx->security_page)
+		ggiWidgetDestroy(item);
+	item = ggiWidgetUnlinkChild(ctx->tab, 3);
+	if (item != ctx->encoding_page)
+		ggiWidgetDestroy(item);
+
+	GWT_SET_ICHANGED(ctx->tab);
+}
+
+static void
+cb_sheet(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	ggi_widget_t child;
+	int i;
+	int *page = widget->statevar;
+
+	if (cbt != GWT_CB_STATECHANGE)
+		return;
+
+	for (i = 0; (child = ggiWidgetGetChild(widget, i)); ++i)
+		ggiWidgetSetTreeState(child, GWT_STATE_INACTIVE, i != *page);
+
+	GWT_WIDGET_MAKE_ACTIVE(widget);
+	GWT_SET_ICHANGED(widget);
+}
+
 struct adjust {
-	int count;
+	struct connection *cx;
+	ggi_widget_t used;
+	ggi_widget_t unused;
+	ggi_widget_t sec_used;
+	ggi_widget_t sec_unused;
 	int *min_y;
-	int *opt_y;
 };
 
 static void
 adjust_size(ggi_widget_t widget, void *data)
 {
 	struct adjust *adj = data;
-	int extra = adj->count - g.encoding_count;
+	ggi_widget_t used;
+	ggi_widget_t unused;
+	int i;
 
-	if (extra > g.encoding_count)
-		extra = g.encoding_count;
-	widget->min.y += *adj->min_y * extra;
-	widget->opt.y += *adj->opt_y * extra;
+	used = adj->used;
+	unused = adj->unused;
+
+	for (i = 0; ggiWidgetGetChild(used, i); ++i);
+	unused->pad.b = i * *adj->min_y;
+	GWT_SET_ICHANGED(unused);
+
+	for (i = 0; ggiWidgetGetChild(unused, i); ++i);
+	used->pad.b = i * *adj->min_y;
+	GWT_SET_ICHANGED(used);
+
+	used = adj->sec_used;
+	unused = adj->sec_unused;
+
+	for (i = 0; ggiWidgetGetChild(used, i); ++i);
+	unused->pad.b = i * *adj->min_y;
+	GWT_SET_ICHANGED(unused);
+
+	for (i = 0; ggiWidgetGetChild(unused, i); ++i);
+	used->pad.b = i * *adj->min_y;
+	GWT_SET_ICHANGED(used);
+
+	ggiWidgetRedrawWidgets(adj->cx->visualanchor);
 }
 
 static void
-integer(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+cb_integer(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
 	double *state = (double *)widget->statevar;
-	*state = floor(*state);
+	*state = round(*state);
 }
 
 static ggi_widget_t
-checkbox_widget(void)
+create_checkbox(const char *text)
 {
 	ggi_widget_t label;
-	ggi_widget_t check;
-	ggi_widget_t number;
-	ggi_widget_t shared_session;
-	ggi_widget_t no_input;
-	ggi_widget_t auto_enc;
-	ggi_widget_t compression = NULL;
-#ifdef HAVE_JPEG
-	ggi_widget_t quality;
-#endif
-	ggi_widget_t checkboxes;
-	int i;
+	ggi_widget_t item;
 
-	label = ggiWidgetCreateLabel("Request Shared Session");
+	label = ggiWidgetCreateLabel(text);
+	if (!label)
+		return NULL;
 	label->pad.l = 2;
-	shared_session = ggiWidgetCreateCheckbox(label, NULL);
-	shared_session->gravity = GWT_GRAV_WEST;
-	shared_session->statevar = &g.shared;
 
-	label = ggiWidgetCreateLabel("View Only (inputs ignored)");
-	label->pad.l = 2;
-	no_input = ggiWidgetCreateCheckbox(label, NULL);
-	no_input->gravity = GWT_GRAV_WEST;
-	no_input->statevar = &g.no_input;
+	item = ggiWidgetCreateCheckbox(label, NULL);
+	if (!item)
+		return cleanup(label);
 
-	label = ggiWidgetCreateLabel("Automatic encoding selection");
-	label->pad.l = 2;
-	auto_enc = ggiWidgetCreateCheckbox(label, NULL);
-	auto_enc->gravity = GWT_GRAV_WEST;
-	auto_enc->statevar = &g.auto_encoding;
+	return item;
+}
 
 #ifdef HAVE_ZLIB
-	label = ggiWidgetCreateLabel("Compression");
-	label->pad.l = 2;
-	check = ggiWidgetCreateCheckbox(label, NULL);
-	check->gravity = GWT_GRAV_WEST;
-	check->statevar = &g.compression;
-	number = ggiWidgetCreateOdometer(25, 40.0, 320.0, 0.0, 9.0, 8, 0);
-	number->statevar = &g.compression_level;
-	number->callback = integer;
-	compression = ggiWidgetCreateContainerLine(2, check, number, NULL);
-	compression->gravity = GWT_GRAV_WEST;
+static ggi_widget_t
+checkbox_widget(struct ctx *ctx)
+{
+	struct connection *cx = ctx->cx;
+	ggi_widget_t cont;
+	ggi_widget_t item;
+	int i;
 
-	g.compression = 0;
-	g.compression_level = 0.0;
-	for (i = 0; i < g.encoding_count; ++i) {
-		if (-256 > g.encoding[i] || g.encoding[i] > -247)
+	cont = ggiWidgetCreateContainerLine(2, NULL);
+	if (!cont)
+		return NULL;
+	cont->gravity = GWT_GRAV_WEST;
+
+	item = create_checkbox("Compression");
+	if (!item)
+		return cleanup(cont);
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->compression;
+	link_last_child(cont, item);
+
+	item = ggiWidgetCreateOdometer(25, 40.0, 320.0, 0.0, 9.0, 8, 0);
+	if (!item)
+		return cleanup(cont);
+	item->statevar = &cx->compression_level;
+	item->callback = cb_integer;
+	link_last_child(cont, item);
+
+	cx->compression = 0;
+	cx->compression_level = 0.0;
+	for (i = 0; i < cx->allowed_encodings; ++i) {
+		if (-256 > cx->allow_encoding[i] ||
+			cx->allow_encoding[i] > -247)
+		{
 			continue;
-		g.compression = 1;
-		g.compression_level = g.encoding[i] + 256;
+		}
+		cx->compression = 1;
+		cx->compression_level = cx->allow_encoding[i] + 256;
 	}
 
 #ifdef HAVE_JPEG
-	label = ggiWidgetCreateLabel("Quality");
-	label->pad.l = 2;
-	check = ggiWidgetCreateCheckbox(label, NULL);
-	check->gravity = GWT_GRAV_WEST;
-	check->statevar = &g.quality;
-	number = ggiWidgetCreateOdometer(25, 40.0, 320.0, 0.0, 9.0, 8, 0);
-	number->statevar = &g.quality_level;
-	number->callback = integer;
-	quality = ggiWidgetCreateContainerLine(2, check, number, NULL);
-	quality->gravity = GWT_GRAV_WEST;
+	item = create_checkbox("Quality");
+	if (!item)
+		return cleanup(cont);
+	item->pad.l = 20;
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->quality;
+	link_last_child(cont, item);
 
-	g.quality = 0;
-	g.quality_level = 0.0;
-	for (i = 0; i < g.encoding_count; ++i) {
-		if (-32 > g.encoding[i] || g.encoding[i] > -23)
+	item = ggiWidgetCreateOdometer(25, 40.0, 320.0, 0.0, 9.0, 8, 0);
+	if (!item)
+		return cleanup(cont);
+	item->statevar = &cx->quality_level;
+	item->callback = cb_integer;
+	link_last_child(cont, item);
+
+	cx->quality = 0;
+	cx->quality_level = 0.0;
+	for (i = 0; i < cx->allowed_encodings; ++i) {
+		if (-32 > cx->allow_encoding[i] ||
+			cx->allow_encoding[i] > -23)
+		{
 			continue;
-		g.quality = 1;
-		g.quality_level = g.encoding[i] + 32;
+		}
+		cx->quality = 1;
+		cx->quality_level = cx->allow_encoding[i] + 32;
 	}
-
-	compression = ggiWidgetCreateContainerLine(
-		20, compression, quality, NULL);
 #endif /* HAVE_JPEG */
-#endif /* HAVE_ZLIB */
 
-	checkboxes = ggiWidgetCreateContainerStack(
-		2, shared_session, no_input, auto_enc, compression, NULL);
-	checkboxes->pad.t = 3;
-	checkboxes->gravity = GWT_GRAV_WEST;
-
-	return checkboxes;
+	return cont;
 }
+#endif /* HAVE_ZLIB */
 
 static ggi_widget_t
 pixfmt_widget(struct ctx *ctx)
 {
+	struct connection *cx = ctx->cx;
 	const char *options[] = {
 		"r1g1b1",
 		"r2g2b2",
@@ -380,106 +617,135 @@ pixfmt_widget(struct ctx *ctx)
 		"r8g8b8",
 		NULL
 	};
+	ggi_widget_t atom;
 	ggi_widget_t item;
-	ggi_widget_t h1, h2;
-	ggi_widget_t l1;
-	ggi_widget_t o1;
-	ggi_widget_t l2;
-	ggi_widget_t o2;
-	ggi_widget_t d3;
-	ggi_widget_t o3;
-	ggi_widget_t t4;
-	ggi_widget_t o4;
-	ggi_widget_t s;
+	ggi_widget_t cont;
 	int i;
 
 	ctx->pf_opt = 5;
-	if (!g.wire_pixfmt[0])
+	if (!cx->wire_pixfmt[0])
 		ctx->pixfmt[0] = 1;
-	else if (!strcmp(g.wire_pixfmt, "local"))
+	else if (!strcmp(cx->wire_pixfmt, "local"))
 		ctx->pixfmt[0] = 1;
-	else if (!strcmp(g.wire_pixfmt, "server"))
+	else if (!strcmp(cx->wire_pixfmt, "server"))
 		ctx->pixfmt[1] = 1;
-	else if (!strcmp(g.wire_pixfmt, "p5r1g1b1")) {
+	else if (!strcmp(cx->wire_pixfmt, "p5r1g1b1")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 0;
 	}
-	else if (!strcmp(g.wire_pixfmt, "p2r2g2b2")) {
+	else if (!strcmp(cx->wire_pixfmt, "p2r2g2b2")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 1;
 	}
-	else if (!strcmp(g.wire_pixfmt, "r3g3b2")) {
+	else if (!strcmp(cx->wire_pixfmt, "r3g3b2")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 2;
 	}
-	else if (!strcmp(g.wire_pixfmt, "c8")) {
+	else if (!strcmp(cx->wire_pixfmt, "c8")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 3;
 	}
-	else if (!strcmp(g.wire_pixfmt, "p1r5g5b5")) {
+	else if (!strcmp(cx->wire_pixfmt, "p1r5g5b5")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 4;
 	}
-	else if (!strcmp(g.wire_pixfmt, "r5g6b5")) {
+	else if (!strcmp(cx->wire_pixfmt, "r5g6b5")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 5;
 	}
-	else if (!strcmp(g.wire_pixfmt, "p8r8g8b8")) {
+	else if (!strcmp(cx->wire_pixfmt, "p8r8g8b8")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 6;
 	}
-	else if (!strcmp(g.wire_pixfmt, "weird")) {
+	else if (!strcmp(cx->wire_pixfmt, "weird")) {
 		ctx->pixfmt[2] = 1;
 		ctx->pf_opt = 5;
 	}
 	else {
 		ctx->pixfmt[3] = 1;
-		ggstrlcpy(ctx->pf_custom, g.wire_pixfmt,
+		ggstrlcpy(ctx->pf_custom, cx->wire_pixfmt,
 			sizeof(ctx->pf_custom));
 	}
 
-	h1 = ggiWidgetCreateLabel("Pixel");
-	h2 = ggiWidgetCreateLabel("Format");
-	l1 = ggiWidgetCreateLabel("Local");
-	o1 = ggiWidgetCreateRadiobutton(ctx->pixfmt, l1, NULL);
-	l2 = ggiWidgetCreateLabel("Server");
-	o2 = ggiWidgetCreateRadiobutton(ctx->pixfmt, l2, NULL);
-	d3 = ggiWidgetCreateContainerDropdownList(
+	cont = ggiWidgetCreateContainerStack(0, NULL);
+	if (!cont)
+		return NULL;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateLabel("Pixel Format");
+	if (!item)
+		return cleanup(cont);
+	item->pad.b = 5;
+	link_last_child(cont, item);
+
+	atom = ggiWidgetCreateLabel("Local");
+	if (!atom)
+		return cleanup(cont);
+	atom->pad.l = atom->pad.t = atom->pad.b = 2;
+	item = ggiWidgetCreateRadiobutton(ctx->pixfmt, atom, NULL);
+	if (!item) {
+		cleanup(atom);
+		return cleanup(cont);
+	}
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &ctx->pixfmt[0];
+	link_last_child(cont, item);
+
+	atom = ggiWidgetCreateLabel("Server");
+	if (!atom)
+		return cleanup(cont);
+	atom->pad.l = atom->pad.t = atom->pad.b = 2;
+	item = ggiWidgetCreateRadiobutton(ctx->pixfmt, atom, NULL);
+	if (!item) {
+		cleanup(atom);
+		return cleanup(cont);
+	}
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &ctx->pixfmt[1];
+	link_last_child(cont, item);
+
+	atom = ggiWidgetCreateContainerDropdownList(
 		GWT_DROPDOWNLIST_OPTION_SELECT, NULL);
+	if (!atom)
+		return cleanup(cont);
+	atom->statevar = &ctx->pf_opt;
+	item = ggiWidgetCreateRadiobutton(ctx->pixfmt, atom, NULL);
+	if (!item) {
+		cleanup(atom);
+		return cleanup(cont);
+	}
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &ctx->pixfmt[2];
+	link_last_child(cont, item);
 	for (i = 0; options[i]; ++i) {
 		item = ggiWidgetCreateLabel(options[i]);
+		if (!item)
+			return cleanup(cont);
 		GWT_WIDGET_MAKE_SELECTABLE(item);
 		if (i == ctx->pf_opt)
 			GWT_WIDGET_MAKE_SELECTED(item);
-		d3->linkchild(d3, LAST_CHILD, item);
+		link_last_child(atom, item);
 	}
-	o3 = ggiWidgetCreateRadiobutton(ctx->pixfmt, d3, NULL);
-	t4 = ggiWidgetCreateText(ctx->pf_custom, 8, 29);
-	o4 = ggiWidgetCreateRadiobutton(ctx->pixfmt, t4, NULL);
-	s  = ggiWidgetCreateContainerStack(
-		0, h1, h2, o1, o2, o3, o4, NULL);
 
-	h1->pad.b = 1;
-	h2->pad.b = 5;
-	l1->pad.l = l1->pad.t = l1->pad.b = 2;
-	o1->gravity = GWT_GRAV_WEST;
-	o1->statevar = &ctx->pixfmt[0];
-	l2->pad.l = l2->pad.t = l2->pad.b = 2;
-	o2->gravity = GWT_GRAV_WEST;
-	o2->statevar = &ctx->pixfmt[1];
-	d3->statevar = &ctx->pf_opt;
-	o3->gravity = GWT_GRAV_WEST;
-	o3->statevar = &ctx->pixfmt[2];
-	o4->gravity = GWT_GRAV_WEST;
-	o4->statevar = &ctx->pixfmt[3];
-	s->gravity = GWT_GRAV_NORTH;
+	atom = ggiWidgetCreateText(ctx->pf_custom, 8, 29);
+	if (!atom)
+		return cleanup(cont);
+	item = ggiWidgetCreateRadiobutton(ctx->pixfmt, atom, NULL);
+	if (!item) {
+		cleanup(atom);
+		return cleanup(cont);
+	}
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &ctx->pixfmt[3];
+	link_last_child(cont, item);
 
-	return s;
+	return cont;
 }
 
 static ggi_widget_t
 endian_widget(struct ctx *ctx)
 {
+	struct connection *cx = ctx->cx;
 	const char *options[] = {
 		"Local ",
 		"Server",
@@ -488,12 +754,11 @@ endian_widget(struct ctx *ctx)
 		NULL
 	};
 	ggi_widget_t item;
-	ggi_widget_t header;
-	ggi_widget_t option;
-	ggi_widget_t endian;
+	ggi_widget_t atom;
+	ggi_widget_t cont;
 	int i;
 
-	switch (g.wire_endian) {
+	switch (cx->wire_endian) {
 	case 1:
 		ctx->endian_opt = 2;
 		break;
@@ -509,28 +774,41 @@ endian_widget(struct ctx *ctx)
 		break;
 	}
 
-	header = ggiWidgetCreateLabel("Endian");
-	option = ggiWidgetCreateContainerDropdownList(
+	cont = ggiWidgetCreateContainerStack(0, NULL);
+	if (!cont)
+		return NULL;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateLabel("Endian");
+	if (!item)
+		return cleanup(cont);
+	item->pad.b = 2;
+	link_last_child(cont, item);
+
+	item = ggiWidgetCreateContainerDropdownList(
 		GWT_DROPDOWNLIST_OPTION_SELECT, NULL);
+	if (!item)
+		return cleanup(cont);
+	item->statevar = &ctx->endian_opt;
+	link_last_child(cont, item);
+
 	for (i = 0; options[i]; ++i) {
-		item = ggiWidgetCreateLabel(options[i]);
-		GWT_WIDGET_MAKE_SELECTABLE(item);
+		atom = ggiWidgetCreateLabel(options[i]);
+		if (!atom)
+			return cleanup(cont);
+		GWT_WIDGET_MAKE_SELECTABLE(atom);
 		if (i == ctx->endian_opt)
-			GWT_WIDGET_MAKE_SELECTED(item);
-		option->linkchild(option, LAST_CHILD, item);
+			GWT_WIDGET_MAKE_SELECTED(atom);
+		link_last_child(item, atom);
 	}
-	endian = ggiWidgetCreateContainerStack(0, header, option, NULL);
 
-	header->pad.b = 2;
-	option->statevar = &ctx->endian_opt;
-	endian->gravity = GWT_GRAV_NORTH;
-
-	return endian;
+	return cont;
 }
 
 static ggi_widget_t
 protocol_widget(struct ctx *ctx)
 {
+	struct connection *cx = ctx->cx;
 	const char *options[] = {
 		"3.3",
 		"3.7",
@@ -538,12 +816,11 @@ protocol_widget(struct ctx *ctx)
 		NULL
 	};
 	ggi_widget_t item;
-	ggi_widget_t header;
-	ggi_widget_t option;
-	ggi_widget_t protocol;
+	ggi_widget_t atom;
+	ggi_widget_t cont;
 	int i;
 
-	switch (g.max_protocol) {
+	switch (cx->max_protocol) {
 	case 3:
 		ctx->protocol_opt = 0;
 		break;
@@ -555,44 +832,52 @@ protocol_widget(struct ctx *ctx)
 		break;
 	}
 
-	header = ggiWidgetCreateLabel("Protocol");
-	option = ggiWidgetCreateContainerDropdownList(
+	cont = ggiWidgetCreateContainerLine(10, NULL);
+	if (!cont)
+		return NULL;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateLabel("RFB Protocol Version");
+	if (!item)
+		return cleanup(cont);
+	link_last_child(cont, item);
+
+	item = ggiWidgetCreateContainerDropdownList(
 		GWT_DROPDOWNLIST_OPTION_SELECT, NULL);
+	if (!item)
+		return cleanup(cont);
+	item->statevar = &ctx->protocol_opt;
+	link_last_child(cont, item);
 	for (i = 0; options[i]; ++i) {
-		item = ggiWidgetCreateLabel(options[i]);
-		GWT_WIDGET_MAKE_SELECTABLE(item);
+		atom = ggiWidgetCreateLabel(options[i]);
+		if (!atom)
+			return cleanup(cont);
+		GWT_WIDGET_MAKE_SELECTABLE(atom);
 		if (i == ctx->protocol_opt)
-			GWT_WIDGET_MAKE_SELECTED(item);
-		option->linkchild(option, LAST_CHILD, item);
+			GWT_WIDGET_MAKE_SELECTED(atom);
+		link_last_child(item, atom);
 	}
-	protocol = ggiWidgetCreateContainerStack(0, header, option, NULL);
 
-	header->pad.b = 2;
-	option->statevar = &ctx->protocol_opt;
-	protocol->gravity = GWT_GRAV_NORTH;
-
-	return protocol;
+	return cont;
 }
 
-#ifdef HAVE_GETADDRINFO
+#ifdef PF_INET6
 static ggi_widget_t
 family_widget(struct ctx *ctx)
 {
+	struct connection *cx = ctx->cx;
 	const char *options[] = {
 		"Any ",
 		"IPv4",
-#ifdef PF_INET6
 		"IPv6",
-#endif
 		NULL
 	};
 	ggi_widget_t item;
-	ggi_widget_t header;
-	ggi_widget_t option;
-	ggi_widget_t family;
+	ggi_widget_t cont;
+	ggi_widget_t atom;
 	int i;
 
-	switch (g.net_family) {
+	switch (cx->net_family) {
 	case 4:
 		ctx->family_opt = 1;
 		break;
@@ -603,58 +888,343 @@ family_widget(struct ctx *ctx)
 		ctx->family_opt = 0;
 	}
 
-	header = ggiWidgetCreateLabel("Protocol Family");
-	option = ggiWidgetCreateContainerDropdownList(
+	cont = ggiWidgetCreateContainerLine(0, NULL);
+	if (!cont)
+		return NULL;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateLabel("Protocol Family");
+	if (!item)
+		return cleanup(cont);
+	item->pad.r = 10;
+	link_last_child(cont, item);
+
+	item = ggiWidgetCreateContainerDropdownList(
 		GWT_DROPDOWNLIST_OPTION_SELECT, NULL);
+	if (!item)
+		return cleanup(cont);
+	item->statevar = &ctx->family_opt;
+	link_last_child(cont, item);
 	for (i = 0; options[i]; ++i) {
-		item = ggiWidgetCreateLabel(options[i]);
-		GWT_WIDGET_MAKE_SELECTABLE(item);
+		atom = ggiWidgetCreateLabel(options[i]);
+		if (!atom)
+			return cleanup(cont);
+		GWT_WIDGET_MAKE_SELECTABLE(atom);
 		if (i == ctx->family_opt)
-			GWT_WIDGET_MAKE_SELECTED(item);
-		option->linkchild(option, LAST_CHILD, item);
+			GWT_WIDGET_MAKE_SELECTED(atom);
+		link_last_child(item, atom);
 	}
-	family = ggiWidgetCreateContainerLine(0, header, option, NULL);
 
-	header->pad.r = 10;
-	option->statevar = &ctx->family_opt;
-	family->gravity = GWT_GRAV_NORTH;
-
-	return family;
+	return cont;
 }
-#endif /* HAVE_GETADDRINFO */
+#endif /* PF_INET6 */
 
-int
-get_connection(void)
+static char *
+get_config_file(const char *file)
 {
-	ggi_widget_t prompt;
-	ggi_widget_t vnc_server;
-	ggi_widget_t vnc_server_help;
-#ifdef HAVE_GETADDRINFO
-	ggi_widget_t protocol_family;
-#endif
-	ggi_widget_t checkboxes;
-	ggi_widget_t encodings;
-	ggi_widget_t unused_encodings;
-	ggi_widget_t list = NULL;
-	ggi_widget_t grid;
-	ggi_widget_t pixfmt;
-	ggi_widget_t endian;
-	ggi_widget_t protocol;
-	ggi_widget_t params;
-	ggi_widget_t conn;
-	ggi_widget_t cancel;
-	ggi_widget_t buttons;
-	ggi_widget_t dialog;
-	ggi_widget_t visualanchor;
-	struct move_encodings_t move_left;
-	struct move_encodings_t move_right;
-	static char server[1024];
-	struct ctx ctx = { 0, { 0, 0, 0, 0 }, 5, "", 0, 0, 0 };
+	const char *home = get_appdata_path();
+	char dot[] = ".";
+	int len;
+	char *path;
+	struct stat st;
+
+	if (home)
+		dot[0] = '\0';
+	else
+		home = getenv("HOME");
+
+	if (!home)
+		return NULL;
+
+	len = strlen(home) + sizeof("/." PACKAGE "/") + strlen(file);
+	path = malloc(len);
+	if (!path)
+		return NULL;
+
+	strcpy(path, home);
+	strcat(path, "/");
+	strcat(path, dot);
+	strcat(path, PACKAGE);
+	if (stat(path, &st))
+		mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO);
+	strcat(path, "/");
+	strcat(path, file);
+	return path;
+}
+
+static ggi_widget_t
+server_widget(char *server, size_t length)
+{
+	ggi_widget_t vnc_server = NULL;
+	char *recent_path = get_config_file("recent");
+	FILE *recent = NULL;
+	char recent_srv[1024];
+	int size;
 	int i;
-	int32_t *encoding;
-	const int32_t *def_enc;
-	int encoding_count;
-	int result = 0;
+
+	if (!recent_path)
+		goto done;
+
+	debug(2, "Opening recent file: \"%s\"\n", recent_path);
+	recent = fopen(recent_path, "rt");
+	if (!recent) {
+		debug(1, "Failed to open recent file: \"%s\"\n", recent_path);
+		goto done;
+	}
+	for (;;) {
+		if (!fgets(server, length, recent))
+			goto done;
+		size = strlen(server);
+		if (server[size - 1] == '\n')
+			server[--size] = '\0';
+		if (!size)
+			continue;
+		debug(2, "Recent server: \"%s\"\n", server);
+		break;
+	}
+	vnc_server = ggiWidgetCreateTextHistory(server,
+		32, length - 1, 1);
+	if (!vnc_server)
+		goto done;
+	for (i = 0; i < 10; ++i) {
+		if (!fgets(recent_srv, sizeof(recent_srv), recent))
+			break;
+		size = strlen(recent_srv);
+		if (recent_srv[size - 1] == '\n')
+			recent_srv[--size] = '\0';
+		if (!size)
+			continue;
+		debug(2, "Recent server: \"%s\"\n", recent_srv);
+		ggiWidgetSendControl(vnc_server, GWT_CONTROLFLAG_NONE,
+			"ADDHISTORY", 0, recent_srv);
+	}
+	ggiWidgetSendControl(vnc_server, GWT_CONTROLFLAG_NONE,
+		"ADDHISTORY", 0, "");
+done:
+	if (recent)
+		fclose(recent);
+	if (recent_path)
+		free(recent_path);
+	if (!vnc_server) {
+		memset(server, 0, length);
+		vnc_server = ggiWidgetCreateText(server, 36, length - 1);
+	}
+
+	return vnc_server;
+}
+
+static void
+update_recent_file(struct connection *cx)
+{
+	/* Store server in recent servers file. */
+	char *recent_new_path = get_config_file("recent_XXXXXX");
+	char *recent_path = get_config_file("recent");
+	int recent_new_fd;
+	FILE *recent = NULL;
+	FILE *recent_new = NULL;
+	char recent_srv[1024];
+	int size;
+	int count = 0;
+
+	debug(1, "Most recent server: %s\n", cx->server_port);
+	if (!recent_new_path || !recent_path) {
+		debug(1, "Failed to generate config path.\n");
+		goto fail;
+	}
+
+	recent = fopen(recent_path, "r");
+	while (recent) {
+		if (!fgets(recent_srv, sizeof(recent_srv), recent)) {
+			fclose(recent);
+			recent = NULL;
+			break;
+		}
+		size = strlen(recent_srv);
+		if (recent_srv[size - 1] == '\n')
+			recent_srv[--size] = '\0';
+		if (!size)
+			continue;
+		if (!strcmp(recent_srv, cx->server_port)) {
+			debug(1, "Same server as last time.\n");
+			goto done;
+		}
+		break;
+	}
+	recent_new_fd = mkstemp(recent_new_path);
+	if (recent_new_fd < 0) {
+		debug(1, "Failed to open new recent server file.\n");
+		goto fail;
+	}
+	debug(1, "Opened new temporary recent file \"%s\".\n",
+		recent_new_path);
+	recent_new = fdopen(recent_new_fd, "w");
+	if (!recent_new) {
+		debug(1, "Failed to fdopen new recent file.\n");
+		close(recent_new_fd);
+		unlink(recent_new_path);
+		goto fail;
+	}
+	if (fputs(cx->server_port, recent_new) < 0) {
+		debug(1, "Failed to write recent server.\n");
+		goto fail;
+	}
+	if (fputc('\n', recent_new) < 0) {
+		debug(1, "Failed to write NL in recent.\n");
+		goto fail;
+	}
+	++count;
+	debug(2, "New recent server: \"%s\"\n", cx->server_port);
+	if (recent) {
+		if (fputs(recent_srv, recent_new) < 0) {
+			debug(1, "Failed to write recent server.\n");
+			goto fail;
+		}
+		if (fputc('\n', recent_new) < 0) {
+			debug(1, "Failed to write NL in recent.\n");
+			goto fail;
+		}
+		++count;
+		debug(2, "New recent server: \"%s\"\n", recent_srv);
+	}
+	while (recent && count < 50) {
+		if (!fgets(recent_srv, sizeof(recent_srv), recent))
+			break;
+		size = strlen(recent_srv);
+		if (recent_srv[size - 1] == '\n')
+			recent_srv[--size] = '\0';
+		if (!size)
+			continue;
+		if (!strcmp(recent_srv, cx->server_port))
+			continue;
+		if (fputs(recent_srv, recent_new) < 0) {
+			debug(1, "Failed to write recent server.\n");
+			goto fail;
+		}
+		if (fputc('\n', recent_new) < 0) {
+			debug(1, "Failed to write NL in recent.\n");
+			goto fail;
+		}
+		++count;
+		debug(2, "New recent server: \"%s\"\n", recent_srv);
+	}
+	fclose(recent_new);
+	recent_new = NULL;
+	if (recent) {
+		fclose(recent);
+		recent = NULL;
+	}
+	if (rename(recent_new_path, recent_path)) {
+		debug(1, "Failed to rename recent.\n");
+		unlink(recent_new_path);
+		goto fail;
+	}
+	goto done;
+fail:
+	debug(1, "Failed to update recent servers.\n");
+	if (recent_new) {
+		fclose(recent_new);
+		recent_new = NULL;
+		unlink(recent_new_path);
+	}
+done:
+	if (recent)
+		fclose(recent);
+	if (recent_path)
+		free(recent_path);
+	if (recent_new_path)
+		free(recent_new_path);
+}
+
+static ggi_widget_t
+server_page(struct ctx *ctx, ggi_widget_t *focus, ggi_widget_t *expert)
+{
+	struct connection *cx = ctx->cx;
+	ggi_widget_t params;
+	ggi_widget_t cont;
+	ggi_widget_t item;
+	ggi_widget_t vnc_server;
+	static char server[1024];
+
+	params = ggiWidgetCreateContainerStack(4, NULL);
+	if (!params)
+		return NULL;
+	params->pad.t = 15;
+	params->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateLabel("VNC Server");
+	if (!item)
+		return cleanup(params);
+	link_last_child(params, item);
+
+	vnc_server = server_widget(server, sizeof(server));
+	if (!vnc_server)
+		return cleanup(params);
+	vnc_server->callback = cb_ok;
+	vnc_server->callbackpriv = ctx;
+	cx->server_port = server;
+	link_last_child(params, vnc_server);
+
+	item = ggiWidgetCreateLabel("(host, host:display or host::port)");
+	if (!item)
+		return cleanup(params);
+	link_last_child(params, item);
+
+#ifdef PF_INET6
+	item = family_widget(ctx);
+	if (!item)
+		return cleanup(params);
+	link_last_child(params, item);
+#endif
+
+	cont = ggiWidgetCreateContainerStack(2, NULL);
+	if (!cont)
+		return cleanup(params);
+	cont->pad.t = 15;
+	link_last_child(params, cont);
+
+	item = create_checkbox("Request Shared Session");
+	if (!item)
+		return cleanup(params);
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->shared;
+	link_last_child(cont, item);
+
+	item = create_checkbox("View Only (inputs ignored)");
+	if (!item)
+		return cleanup(params);
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->no_input;
+	link_last_child(cont, item);
+
+	item = create_checkbox("Show More Options");
+	if (!item)
+		return cleanup(params);
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &ctx->expert;
+	item->callback = cb_expert;
+	item->callbackpriv = ctx;
+	link_last_child(cont, item);
+	*expert = item;
+
+	*focus = vnc_server;
+	return params;
+}
+
+static ggi_widget_t
+security_page(struct ctx *ctx, struct adjust *adj)
+{
+	struct connection *cx = ctx->cx;
+	ggi_widget_t cont;
+	ggi_widget_t atom;
+	ggi_widget_t item;
+	ggi_widget_t used, unused;
+	ggi_widget_t move;
+	ggi_widget_t label1, label2;
+	ggi_widget_t button1, button2;
+	ggi_widget_t list = NULL;
+	struct move_encodings *move_left;
+	struct move_encodings *move_right;
+	int i, j;
 	static struct ggiWidgetImage left = {
 		{ 15, 9 },
 		GWT_IF_BITMAP,
@@ -672,209 +1242,698 @@ get_connection(void)
 		GWT_IF_NONE, NULL
 	};
 
-	g.width = 400;
-	g.height = 308;
-#ifdef HAVE_GETADDRINFO
-	g.height += 16;
+
+	cont = ggiWidgetCreateContainerStack(4, NULL);
+	if (!cont)
+		return NULL;
+	cont->pad.t = 15;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateContainerLine(10, NULL);
+	if (!item)
+		return cleanup(cont);
+	link_last_child(cont, item);
+
+	used = ggiWidgetCreateContainerStack(0, NULL);
+	if (!used)
+		return cleanup(cont);
+	used->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, used);
+
+	label1 = ggiWidgetCreateLabel("Allowed");
+	if (!label1)
+		return cleanup(cont);
+	label1->pad.b = 1;
+	link_last_child(used, label1);
+
+	label2 = ggiWidgetCreateLabel("Security Types");
+	if (!label2)
+		return cleanup(cont);
+	link_last_child(used, label2);
+
+	adj->sec_used = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
+	if (!adj->sec_used)
+		return cleanup(cont);
+	adj->sec_used->gravity = GWT_GRAV_NORTH;
+	adj->sec_used->pad.t = 5;
+	link_last_child(used, adj->sec_used);
+
+	move = ggiWidgetCreateContainerStack(5, NULL);
+	if (!move)
+		return cleanup(cont);
+	move->pad.t = 20;
+	move->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, move);
+
+	button1 = ggiWidgetMakeImagebutton(&left);
+	if (!button1)
+		return cleanup(cont);
+	button1->callback = cb_move_encodings;
+	link_last_child(move, button1);
+	move_left = malloc(sizeof(*move_left));
+	if (!move_left)
+		return cleanup(cont);
+	button1->callbackpriv = move_left;
+	move_left->free_cb_priv = 1;
+
+	button2 = ggiWidgetMakeImagebutton(&right);
+	if (!button2)
+		return cleanup(cont);
+	button2->callback = cb_move_encodings;
+	link_last_child(move, button2);
+	move_right = malloc(sizeof(*move_right));
+	if (!move_right)
+		return cleanup(cont);
+	button2->callbackpriv = move_right;
+	move_right->free_cb_priv = 1;
+
+	unused = ggiWidgetCreateContainerStack(0, NULL);
+	if (!unused)
+		return cleanup(cont);
+	unused->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, unused);
+
+	label1 = ggiWidgetCreateLabel("Disallowed");
+	if (!label1)
+		return cleanup(cont);
+	label1->pad.b = 1;
+	link_last_child(unused, label1);
+
+	label2 = ggiWidgetCreateLabel("Security Types");
+	if (!label2)
+		return cleanup(cont);
+	link_last_child(unused, label2);
+
+	adj->sec_unused = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
+	if (!adj->sec_unused)
+		return cleanup(cont);
+	adj->sec_unused->gravity = GWT_GRAV_NORTH;
+	adj->sec_unused->pad.t = 5;
+	link_last_child(unused, adj->sec_unused);
+
+	list = ggiWidgetCreateContainerStack(2, NULL);
+	if (!list)
+		return cleanup(cont);
+	list->pad.t = 15;
+	link_last_child(cont, list);
+
+	atom = ggiWidgetCreateContainerStack(2, NULL);
+	if (!atom)
+		return cleanup(cont);
+	atom->pad.l = 2;
+
+	item = ggiWidgetCreateCheckbox(atom, NULL);
+	if (!item) {
+		cleanup(atom);
+		return cleanup(cont);
+	}
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->force_security;
+	link_last_child(list, item);
+
+	item = ggiWidgetCreateLabel("As a last resort, try to force");
+	if (!item)
+		return cleanup(cont);
+	link_last_child(atom, item);
+
+	item = ggiWidgetCreateLabel("the first allowed security type");
+	if (!item)
+		return cleanup(cont);
+	link_last_child(atom, item);
+
+	ggiWidgetSendControl(adj->sec_used, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
+	ggiWidgetSendControl(adj->sec_used, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
+	for (i = 0; cx->allow_security[i]; ++i) {
+		list = create_item(ctx, cx->allow_security[i],
+			security_name(cx->allow_security[i]),
+			adj->sec_unused, adj->sec_used, NULL);
+		if (!list)
+			return cleanup(cont);
+		ggiWidgetSendControl(adj->sec_used,
+			GWT_CONTROLFLAG_NONE,
+			"INSERTROW", GWT_LAST_CHILD);
+		link_last_child(adj->sec_used, list);
+	}
+
+	ggiWidgetSendControl(adj->sec_unused, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
+	ggiWidgetSendControl(adj->sec_unused, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
+	for (j = 0; security_types[j].number; ++j) {
+		if (!security_types[j].weight)
+			continue;
+		for (i = 0; cx->allow_security[i]; ++i) {
+			if (cx->allow_security[i] == security_types[j].number)
+				break;
+		}
+		if (cx->allow_security[i])
+			continue;
+		list = create_item(ctx, security_types[j].number,
+			security_name(security_types[j].number),
+			adj->sec_used, adj->sec_unused, NULL);
+		if (!list)
+			return cleanup(cont);
+		ggiWidgetSendControl(adj->sec_unused, GWT_CONTROLFLAG_NONE,
+			"INSERTROW", GWT_LAST_CHILD);
+		link_last_child(adj->sec_unused, list);
+	}
+
+	move_left->ctx = ctx;
+	move_left->to = adj->sec_used;
+	move_left->from = adj->sec_unused;
+	move_right->ctx = ctx;
+	move_right->to = adj->sec_unused;
+	move_right->from = adj->sec_used;
+
+	adj->min_y = &list->min.y;
+
+	return cont;
+}
+
+static ggi_widget_t
+encodings_page(struct ctx *ctx, struct adjust *adj)
+{
+	struct connection *cx = ctx->cx;
+	ggi_widget_t cont;
+	ggi_widget_t item;
+	ggi_widget_t used, unused;
+	ggi_widget_t move;
+	ggi_widget_t label1, label2;
+	ggi_widget_t button1, button2;
+	ggi_widget_t list = NULL;
+	struct move_encodings *move_left;
+	struct move_encodings *move_right;
+	const int32_t *def_enc;
+	int def_enc_count;
+	int i, j;
+	static struct ggiWidgetImage left = {
+		{ 15, 9 },
+		GWT_IF_BITMAP,
+		(const unsigned char *)
+		"\x00\x00\x0c\x00\x18\x00\x30\x00\x67\xfc"
+		"\x30\x00\x18\x00\x0c\x00\x00\x00",
+		GWT_IF_NONE, NULL
+	};
+	static struct ggiWidgetImage right = {
+		{ 15, 9 },
+		GWT_IF_BITMAP,
+		(const unsigned char *)
+		"\x00\x00\x00\x30\x00\x18\x00\x0c\x7f\xe6"
+		"\x00\x0c\x00\x18\x00\x30\x00\x00",
+		GWT_IF_NONE, NULL
+	};
+
+
+	cont = ggiWidgetCreateContainerStack(4, NULL);
+	if (!cont)
+		return NULL;
+
+	item = create_checkbox("Automatic encoding selection");
+	if (!item)
+		return cleanup(cont);
+	item->gravity = GWT_GRAV_WEST;
+	item->statevar = &cx->auto_encoding;
+	link_last_child(cont, item);
+
+#ifdef HAVE_ZLIB
+	item = checkbox_widget(ctx);
+	if (!item)
+		return cleanup(cont);
+	link_last_child(cont, item);
 #endif
 
-	if (open_visual())
+	item = ggiWidgetCreateContainerLine(10, NULL);
+	if (!item)
+		return cleanup(cont);
+	item->pad.t = 5;
+	link_last_child(cont, item);
+
+	used = ggiWidgetCreateContainerStack(0, NULL);
+	if (!used)
+		return cleanup(cont);
+	used->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, used);
+
+	label1 = ggiWidgetCreateLabel("Requested");
+	if (!label1)
+		return cleanup(cont);
+	label1->pad.b = 1;
+	link_last_child(used, label1);
+
+	label2 = ggiWidgetCreateLabel("Encodings");
+	if (!label2)
+		return cleanup(cont);
+	link_last_child(used, label2);
+
+	adj->used = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
+	if (!adj->used)
+		return cleanup(cont);
+	adj->used->gravity = GWT_GRAV_NORTH;
+	adj->used->pad.t = 5;
+	link_last_child(used, adj->used);
+
+	move = ggiWidgetCreateContainerStack(5, NULL);
+	if (!move)
+		return cleanup(cont);
+	move->pad.t = 20;
+	move->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, move);
+
+	button1 = ggiWidgetMakeImagebutton(&left);
+	if (!button1)
+		return cleanup(cont);
+	button1->callback = cb_move_encodings;
+	link_last_child(move, button1);
+	move_left = malloc(sizeof(*move_left));
+	if (!move_left)
+		return cleanup(cont);
+	button1->callbackpriv = move_left;
+	move_left->free_cb_priv = 1;
+
+	button2 = ggiWidgetMakeImagebutton(&right);
+	if (!button2)
+		return cleanup(cont);
+	button2->callback = cb_move_encodings;
+	link_last_child(move, button2);
+	move_right = malloc(sizeof(*move_right));
+	if (!move_right)
+		return cleanup(cont);
+	button2->callbackpriv = move_right;
+	move_right->free_cb_priv = 1;
+
+	unused = ggiWidgetCreateContainerStack(0, NULL);
+	if (!unused)
+		return cleanup(cont);
+	unused->gravity = GWT_GRAV_NORTH;
+	link_last_child(item, unused);
+
+	label1 = ggiWidgetCreateLabel("Leftover");
+	if (!label1)
+		return cleanup(cont);
+	label1->pad.b = 1;
+	link_last_child(unused, label1);
+
+	label2 = ggiWidgetCreateLabel("Encodings");
+	if (!label2)
+		return cleanup(cont);
+	link_last_child(unused, label2);
+
+	adj->unused = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
+	if (!adj->unused)
+		return cleanup(cont);
+	def_enc_count = get_default_encodings(&def_enc);
+	adj->unused->gravity = GWT_GRAV_NORTH;
+	adj->unused->pad.t = 5;
+	link_last_child(unused, adj->unused);
+
+	ggiWidgetSendControl(adj->used, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
+	ggiWidgetSendControl(adj->used, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
+	for (i = 0; i < cx->allowed_encodings; ++i) {
+		if (-32 <= cx->allow_encoding[i] &&
+			cx->allow_encoding[i] <= -23)
+		{
+			continue;
+		}
+		if (-256 <= cx->allow_encoding[i] &&
+			cx->allow_encoding[i] <= -247)
+		{
+			continue;
+		}
+		list = create_item(ctx, cx->allow_encoding[i],
+			lookup_encoding(cx->allow_encoding[i]),
+			adj->unused, adj->used, NULL);
+		if (!list)
+			return cleanup(cont);
+		ggiWidgetSendControl(adj->used, GWT_CONTROLFLAG_NONE,
+			"INSERTROW", GWT_LAST_CHILD);
+		link_last_child(adj->used, list);
+	}
+
+	ggiWidgetSendControl(adj->unused, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
+	ggiWidgetSendControl(adj->unused, GWT_CONTROLFLAG_NONE,
+		"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
+	for (j = 0; j < def_enc_count; ++j) {
+		for (i = 0; i < cx->allowed_encodings; ++i) {
+			if (cx->allow_encoding[i] == def_enc[j])
+				break;
+		}
+		if (i < cx->allowed_encodings)
+			continue;
+		if (-32 <= def_enc[j] && def_enc[j] <= -23)
+			continue;
+		if (-256 <= def_enc[j] && def_enc[j] <= -247)
+			continue;
+		list = create_item(ctx, def_enc[j],
+			lookup_encoding(def_enc[j]),
+			adj->used, adj->unused, NULL);
+		if (!list)
+			return cleanup(cont);
+		ggiWidgetSendControl(adj->unused, GWT_CONTROLFLAG_NONE,
+			"INSERTROW", GWT_LAST_CHILD);
+		link_last_child(adj->unused, list);
+	}
+
+	move_left->ctx = ctx;
+	move_left->to = adj->used;
+	move_left->from = adj->unused;
+	move_right->ctx = ctx;
+	move_right->to = adj->unused;
+	move_right->from = adj->used;
+
+	adj->min_y = &list->min.y;
+
+	return cont;
+}
+
+static ggi_widget_t
+misc_page(struct ctx *ctx)
+{
+	ggi_widget_t cont;
+	ggi_widget_t item;
+	ggi_widget_t atom;
+
+	cont = ggiWidgetCreateContainerStack(10, NULL);
+	if (!cont)
+		return NULL;
+	cont->pad.t = 15;
+	cont->gravity = GWT_GRAV_NORTH;
+
+	item = ggiWidgetCreateContainerLine(40, NULL);
+	if (!item)
+		return cleanup(cont);
+	item->gravity = GWT_GRAV_WEST;
+	link_last_child(cont, item);
+
+	atom = pixfmt_widget(ctx);
+	if (!atom)
+		return cleanup(cont);
+	link_last_child(item, atom);
+
+	atom = endian_widget(ctx);
+	if (!atom)
+		return cleanup(cont);
+	link_last_child(item, atom);
+
+	item = protocol_widget(ctx);
+	if (!item)
+		return cleanup(item);
+	item->gravity = GWT_GRAV_WEST;
+	link_last_child(cont, item);
+
+	return cont;
+}
+
+static ggi_widget_t
+tab_button(const char *text, struct tab_ctrl *tab_ctrl)
+{
+	ggi_widget_t item;
+	ggi_widget_t atom;
+
+	atom = ggiWidgetCreateLabel(text);
+	if (!atom)
+		return NULL;
+	atom->pad.t = atom->pad.b = 3;
+	atom->pad.l = atom->pad.r = 5;
+	item = ggiWidgetCreateButton(atom);
+	if (!item)
+		return cleanup(atom);
+
+	ggiWidgetSendControl(item, GWT_CONTROLFLAG_NONE,
+		"SETPRESSEDTYPE", GWT_FRAMETYPE_TAB_ACTIVE);
+	ggiWidgetSendControl(item, GWT_CONTROLFLAG_NONE,
+		"SETSELECTEDTYPE", GWT_FRAMETYPE_TAB_INACTIVE);
+	ggiWidgetSendControl(item, GWT_CONTROLFLAG_NONE,
+		"SETDESELECTEDTYPE", GWT_FRAMETYPE_TAB_INACTIVE);
+	ggiWidgetSendControl(item, GWT_CONTROLFLAG_NONE,
+		"SETSTICKY", tab_ctrl);
+
+	item->callback = cb_page;
+	item->callbackpriv = tab_ctrl;
+
+	return item;
+}
+
+int
+get_connection(struct connection *cx)
+{
+	ggi_widget_t cont;
+	ggi_widget_t item;
+	ggi_widget_t atom;
+	ggi_widget_t vnc_server;
+	ggi_widget_t expert = NULL;
+	ggi_widget_t visualanchor;
+	struct ctx ctx = {
+		NULL, 0, { 0, 0, 0, 0 }, 5, "", 0, 0, 0, 0,
+		NULL, NULL, NULL, NULL, NULL
+	};
+	struct adjust adj = { NULL, NULL, NULL, NULL, NULL, NULL };
+	int i;
+	int page;
+	int active;
+	int result = 0;
+	struct tab_ctrl tab_ctrl;
+
+	ctx.cx = cx;
+	ctx.expert = cx->expert;
+	adj.cx = cx;
+
+	if (cx->auto_reconnect && cx->server_port)
+		return 0;
+
+	cx->width = 314;
+	cx->height = 314;
+#if !defined HAVE_ZLIB && !defined HAVE_OPENSSL
+	cx->height -= 40;
+#endif
+
+	if (open_visual(cx))
 		return 2;
-	select_mode();
+	select_mode(cx);
 
-	ggiCheckMode(g.stem, &g.mode);
+	ggiCheckMode(cx->stem, &cx->mode);
 
-	if (ggiSetMode(g.stem, &g.mode)) {
-		close_visual();
+	if (ggiSetMode(cx->stem, &cx->mode)) {
+		close_visual(cx);
 		return 1;
 	}
 
 #ifdef GGIWMHFLAG_CATCH_CLOSE
-	ggiWmhAddFlags(g.stem, GGIWMHFLAG_CATCH_CLOSE);
+	ggiWmhAddFlags(cx->stem, GGIWMHFLAG_CATCH_CLOSE);
 #endif
 #ifdef GGIWMHFLAG_CLIPBOARD_CHANGE
-	ggiWmhAddFlags(g.stem, GGIWMHFLAG_CLIPBOARD_CHANGE);
+	ggiWmhAddFlags(cx->stem, GGIWMHFLAG_CLIPBOARD_CHANGE);
 #endif
 
-	if (set_title()) {
-		close_visual();
+	if (set_title(cx)) {
+		close_visual(cx);
 		return 2;
 	}
 
-	ggiSetFlags(g.stem, GGIFLAG_ASYNC);
-	ggiSetColorfulPalette(g.stem);
+	ggiSetFlags(cx->stem, GGIFLAG_ASYNC);
+	ggiSetColorfulPalette(cx->stem);
 
-	visualanchor = g.visualanchor;
+	visualanchor = cx->visualanchor;
 
-	prompt = ggiWidgetCreateLabel("VNC Server");
-	memset(server, 0, sizeof(server));
-	vnc_server = ggiWidgetCreateText(server, 36, sizeof(server) - 1);
-	vnc_server->callback = cb_ok;
-	vnc_server->callbackpriv = &ctx;
-	vnc_server_help = ggiWidgetCreateLabel(
-		"(host, host:display or host::port)");
-	g.server = server;
-#ifdef HAVE_GETADDRINFO
-	protocol_family = family_widget(&ctx);
-#endif
-
-	checkboxes = checkbox_widget();
-
-	{
-		ggi_widget_t used, unused;
-		ggi_widget_t move;
-		ggi_widget_t label1, label2;
-		ggi_widget_t button1, button2;
-		int j;
-
-		encodings = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
-		unused_encodings = ggiWidgetCreateContainerGrid(1, 0, 0, 0);
-		move_left.to = encodings;
-		move_left.from = unused_encodings;
-		move_right.to = unused_encodings;
-		move_right.from = encodings;
-
-		label1 = ggiWidgetCreateLabel("Requested");
-		label1->pad.b = 1;
-		label2 = ggiWidgetCreateLabel("Encodings");
-		encodings->gravity = GWT_GRAV_NORTH;
-		ggiWidgetSendControl(encodings, GWT_CONTROLFLAG_NONE,
-			"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
-		ggiWidgetSendControl(encodings, GWT_CONTROLFLAG_NONE,
-			"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
-		for (i = 0; i < g.encoding_count; ++i) {
-			if (-32 <= g.encoding[i] && g.encoding[i] <= -23)
-				continue;
-			if (-256 <= g.encoding[i] && g.encoding[i] <= -247)
-				continue;
-			list = create_item(g.encoding[i],
-				unused_encodings, encodings, NULL);
-			ggiWidgetSendControl(encodings, GWT_CONTROLFLAG_NONE,
-				"INSERTROW", LAST_CHILD);
-			encodings->linkchild(encodings, LAST_CHILD, list);
-		}
-		encodings->pad.t = 5;
-		used = ggiWidgetCreateContainerStack(
-			0, label1, label2, encodings, NULL);
-		used->gravity = GWT_GRAV_NORTH;
-
-		label1 = ggiWidgetCreateLabel("Leftover");
-		label1->pad.b = 1;
-		label2 = ggiWidgetCreateLabel("Encodings");
-		encoding_count = get_default_encodings(&def_enc);
-		unused_encodings->gravity = GWT_GRAV_NORTH;
-		ggiWidgetSendControl(unused_encodings, GWT_CONTROLFLAG_NONE,
-			"SETOPTIONS", GWT_GRID_OPTION_SELECT_Y);
-		ggiWidgetSendControl(unused_encodings, GWT_CONTROLFLAG_NONE,
-			"SETOPTIONS", GWT_GRID_OPTION_SELECT_MULTI);
-		for (j = 0; j < encoding_count; ++j) {
-			for (i = 0; i < g.encoding_count; ++i) {
-				if (g.encoding[i] == def_enc[j])
-					break;
-			}
-			if (i < g.encoding_count)
-				continue;
-			if (-32 <= def_enc[j] && def_enc[j] <= -23)
-				continue;
-			if (-256 <= def_enc[j] && def_enc[j] <= -247)
-				continue;
-			list = create_item(def_enc[j],
-				encodings, unused_encodings, NULL);
-			ggiWidgetSendControl(unused_encodings,
-				GWT_CONTROLFLAG_NONE,
-				"INSERTROW", LAST_CHILD);
-			unused_encodings->linkchild(unused_encodings,
-				LAST_CHILD, list);
-		}
-		unused_encodings->pad.t = 5;
-		unused = ggiWidgetCreateContainerStack(
-			0, label1, label2, unused_encodings, NULL);
-		unused->gravity = GWT_GRAV_NORTH;
-
-		button1 = ggiWidgetMakeImagebutton(&left);
-		button1->callback = move_encodings;
-		button1->callbackpriv = &move_left;
-		button2 = ggiWidgetMakeImagebutton(&right);
-		button2->callback = move_encodings;
-		button2->callbackpriv = &move_right;
-		move = ggiWidgetCreateContainerStack(
-			5, button1, button2, NULL);
-		move->pad.t = 20;
-		move->gravity = GWT_GRAV_NORTH;
-
-		grid = ggiWidgetCreateContainerGrid(4, 1, 10, 0);
-		grid->linkchild(grid, BY_XYPOS, used, 0, 0);
-		grid->linkchild(grid, BY_XYPOS, move, 1, 0);
-		grid->linkchild(grid, BY_XYPOS, unused, 2, 0);
-		grid->pad.t = 10;
+	ctx.dialog = ggiWidgetCreateContainerStack(10, NULL);
+	if (!ctx.dialog) {
+		result = -2;
+		goto out;
 	}
+	ctx.dialog->gravity = GWT_GRAV_NORTH;
+	ctx.dialog->pad.t = ctx.dialog->pad.b = 10;
+	ctx.dialog->pad.l = ctx.dialog->pad.r = 10;
 
-	pixfmt = pixfmt_widget(&ctx);
-	endian = endian_widget(&ctx);
-	protocol = protocol_widget(&ctx);
-	pixfmt = ggiWidgetCreateContainerStack(10,
-		pixfmt, endian, protocol, NULL);
-	pixfmt->gravity = GWT_GRAV_NORTH;
-	grid->linkchild(grid, BY_XYPOS, pixfmt, 3, 0);
+	item = ggiWidgetCreateContainerLine(0, NULL);
+	if (!item) {
+		result = -2;
+		goto out;
+	}
+	item->gravity = GWT_GRAV_WEST;
+	link_last_child(ctx.dialog, item);
 
-	params = ggiWidgetCreateContainerStack(4,
-		prompt, vnc_server, vnc_server_help,
-#ifdef HAVE_GETADDRINFO
-		protocol_family,
-#endif
-		checkboxes, grid, NULL);
+	atom = ggiWidgetCreateColoredPatch(4, 2,
+		&(ggiWidgetGetPalette(item)->col[GWT_COLOR_SHADOW_LIGHT]));
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	atom->gravity = GWT_GRAV_SOUTH;
+	link_last_child(item, atom);
 
-	conn = ggiWidgetCreateLabel("Connect");
-	conn->pad.t = conn->pad.b = 3;
-	conn->pad.l = conn->pad.r = 8;
-	conn = ggiWidgetCreateButton(conn);
-	conn->callback = cb_ok;
-	conn->callbackpriv = &ctx;
+	ctx.tab = tab_ctrl.tab = ggiWidgetCreateContainerLine(0, NULL);
+	if (!tab_ctrl.tab) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(item, tab_ctrl.tab);
 
-	cancel = ggiWidgetCreateLabel("Cancel");
-	cancel->pad.t = cancel->pad.b = 3;
-	cancel->pad.l = cancel->pad.r = 12;
-	cancel = ggiWidgetCreateButton(cancel);
-	cancel->callback = cb_cancel;
-	cancel->callbackpriv = &ctx;
-	cancel->hotkey.sym = GIIUC_Escape;
+	atom = tab_button("Server", &tab_ctrl);
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	active = 1;
+	atom->statevar = &active;
+	GWT_SET_ICHANGED(atom);
+	link_last_child(tab_ctrl.tab, atom);
 
-	buttons = ggiWidgetCreateContainerStack(4, conn, cancel, NULL);
-	buttons->gravity = GWT_GRAV_NORTH;
-	buttons->pad.t = 10;
+	ctx.security_page = tab_button("Security", &tab_ctrl);
+	if (!ctx.security_page) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.tab, ctx.security_page);
 
-	dialog = ggiWidgetCreateContainerLine(10, params, buttons, NULL);
-	dialog->gravity = GWT_GRAV_NORTH;
-	dialog->pad.t = 10;
-	dialog->pad.l = params->pad.r = 2;
-	dialog->pad.b = 2;
+	ctx.encoding_page = tab_button("Encodings", &tab_ctrl);
+	if (!ctx.encoding_page) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.tab, ctx.encoding_page);
 
-	ggiWidgetFocus(vnc_server);
+	atom = tab_button("Misc", &tab_ctrl);
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.tab, atom);
+
+	atom = ggiWidgetCreateColoredPatch(10, 2,
+		&(ggiWidgetGetPalette(item)->col[GWT_COLOR_SHADOW_LIGHT]));
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	atom->gravity = GWT_GRAV_SOUTH;
+	link_last_child(item, atom);
+
+	tab_ctrl.sheet = ggiWidgetCreateContainerCard(NULL);
+	if (!tab_ctrl.sheet) {
+		result = -2;
+		goto out;
+	}
+	page = 0;
+	tab_ctrl.sheet->statevar = &page;
+	tab_ctrl.sheet->callback = cb_sheet;
+	link_last_child(ctx.dialog, tab_ctrl.sheet);
+
+	item = server_page(&ctx, &vnc_server, &expert);
+	if (!item) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.sheet, item);
+	item = security_page(&ctx, &adj);
+	if (!item) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.sheet, item);
+	item = encodings_page(&ctx, &adj);
+	if (!item) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.sheet, item);
+	item = misc_page(&ctx);
+	if (!item) {
+		result = -2;
+		goto out;
+	}
+	link_last_child(tab_ctrl.sheet, item);
+
+	cont = ggiWidgetCreateContainerLine(4, NULL);
+	if (!cont) {
+		result = -2;
+		goto out;
+	}
+	cont->gravity = GWT_GRAV_EAST;
+	link_last_child(ctx.dialog, cont);
+
+	atom = ggiWidgetCreateLabel("About");
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	atom->pad.t = atom->pad.b = 3;
+	atom->pad.l = atom->pad.r = 16;
+	item = ggiWidgetCreateButton(atom);
+	if (!item) {
+		ggiWidgetDestroy(atom);
+		result = -2;
+		goto out;
+	}
+	item->callback = cb_about;
+	item->callbackpriv = &ctx;
+	link_last_child(cont, item);
+
+	atom = ggiWidgetCreateLabel("Cancel");
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	atom->pad.t = atom->pad.b = 3;
+	atom->pad.l = atom->pad.r = 12;
+	item = ggiWidgetCreateButton(atom);
+	if (!item) {
+		ggiWidgetDestroy(atom);
+		result = -2;
+		goto out;
+	}
+	item->callback = cb_cancel;
+	item->callbackpriv = &ctx;
+	item->hotkey.sym = GIIUC_Escape;
+	link_last_child(cont, item);
+
+	atom = ggiWidgetCreateLabel("Connect");
+	if (!atom) {
+		result = -2;
+		goto out;
+	}
+	atom->pad.t = atom->pad.b = 3;
+	atom->pad.l = atom->pad.r = 8;
+	ctx.connect = ggiWidgetCreateButton(atom);
+	if (!item) {
+		ggiWidgetDestroy(ctx.connect);
+		result = -2;
+		goto out;
+	}
+	ctx.connect->callback = cb_ok;
+	ctx.connect->callbackpriv = &ctx;
+	ggiWidgetSetTreeState(ctx.connect, GWT_STATE_INACTIVE, 1);
+	link_last_child(cont, ctx.connect);
+
+	cb_sheet(tab_ctrl.sheet, GWT_CB_STATECHANGE, NULL, NULL);
+	ggiWidgetFocus(vnc_server, NULL, NULL);
 
 	{
 		ggi_widget_t res;
-		struct adjust adj;
-		adj.count = encoding_count;
-		adj.min_y = &list->min.y;
-		adj.opt_y = &list->opt.y;
 
-		res = attach_and_fit_visual(dialog, adjust_size, &adj);
+		res = attach_and_fit_visual(cx,
+			ctx.dialog, adjust_size, &adj);
+
 		if (!res) {
-			close_visual();
 			result = 1;
 			goto out;
 		}
-		if (set_title()) {
-			close_visual();
+		if (set_title(cx)) {
 			result = 2;
 			goto out;
 		}
-		dialog = res;
+		ctx.dialog = res;
 	}
+
+	cb_expert(expert, GWT_CB_STATECHANGE, NULL, NULL);
+	ggiWidgetRedrawWidgets(visualanchor);
 
 	while (!ctx.done) {
 		gii_event event;
-		giiEventRead(g.stem, &event, emAll);
+		giiEventRead(cx->stem, &event, emAll);
 
 #ifdef GGIWMHFLAG_CATCH_CLOSE
 		switch (event.any.type) {
@@ -895,45 +1954,62 @@ get_connection(void)
 		ggiWidgetRedrawWidgets(visualanchor);
 	}
 
-	visualanchor->unlinkchild(visualanchor, UNLINK_BY_WIDGETPTR, dialog);
-
-	if (ctx.done < 0) {
-		close_visual();
-		result = -1;
+	if (ctx.done != 1) {
+		result = ctx.done;
 		goto out;
 	}
 
-	for (i = 0; encodings->getchild(encodings, i); ++i);
-	g.encoding_count = i + !!g.compression + !!g.quality;
-	encoding = (int32_t *)malloc(g.encoding_count * sizeof(int32_t));
-	if (!encoding) {
-		close_visual();
+	for (i = 0; ggiWidgetGetChild(adj.used, i); ++i);
+	cx->allowed_encodings = i + !!cx->compression + !!cx->quality;
+	free(cx->allow_encoding);
+	cx->allow_encoding = malloc(cx->allowed_encodings * sizeof(int32_t));
+	if (!cx->allow_encoding) {
 		result = -2;
 		goto out;
 	}
 
-	for (i = 0; (list = encodings->getchild(encodings, i)); ++i) {
-		struct move_encodings_t *move = list->callbackpriv;
-		encoding[i] = move->encoding;
+	for (i = 0; (cont = ggiWidgetGetChild(adj.used, i)); ++i) {
+		struct move_encodings *move = cont->callbackpriv;
+		cx->allow_encoding[i] = move->encoding;
 	}
 
-	if (g.compression)
-		encoding[i++] = g.compression_level - 256;
-	if (g.quality)
-		encoding[i++] = g.quality_level - 32;
+	if (cx->compression)
+		cx->allow_encoding[i++] = cx->compression_level - 256;
+	if (cx->quality)
+		cx->allow_encoding[i++] = cx->quality_level - 32;
 
-	if (g.encoding != def_enc)
-		free(g.encoding);
-	g.encoding = encoding;
+	for (i = 0; ggiWidgetGetChild(adj.sec_used, i); ++i);
+	free(cx->allow_security);
+	cx->allow_security = malloc(++i * sizeof(*cx->allow_security));
+	if (!cx->allow_security) {
+		result = -2;
+		goto out;
+	}
+
+	for (i = 0; (cont = ggiWidgetGetChild(adj.sec_used, i)); ++i) {
+		struct move_encodings *move = cont->callbackpriv;
+		cx->allow_security[i] = move->encoding;
+	}
+	cx->allow_security[i] = 0;
 
 out:
-	for (i = 0; (list = encodings->getchild(encodings, i)); ++i)
-		free(list->callbackpriv);
-	i = 0;
-	for (; (list = unused_encodings->getchild(unused_encodings, i)); ++i)
-		free(list->callbackpriv);
-
-	dialog->destroy(dialog);
+	if (ctx.dialog) {
+		ggiWidgetUnlinkChild(visualanchor,
+			GWT_UNLINK_BY_WIDGETPTR, ctx.dialog);
+		if (expert) {
+			cx->expert = ctx.expert;
+			if (!ctx.expert) {
+				ctx.expert = 1;
+				cb_expert(expert,
+					GWT_CB_STATECHANGE, NULL, NULL);
+			}
+		}
+		ggiWidgetDestroy(ctx.dialog);
+	}
+	if (result)
+		close_visual(cx);
+	else
+		update_recent_file(cx);
 
 	return result;
 }

@@ -3,7 +3,9 @@
 
    VNC viewer endian handling.
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -180,6 +183,58 @@ get32_hilo(const uint8_t *buf)
 #endif
 }
 
+static inline uint32_t
+get32_lohi(const uint8_t *buf)
+{
+#ifdef GGI_BIG_ENDIAN
+	return get32_r(buf);
+#else
+	return get32(buf);
+#endif
+}
+
+#ifdef GG_HAVE_INT64
+static inline uint64_t
+get64(const uint8_t *buf)
+{
+#ifdef GGI_BIG_ENDIAN
+	return ((uint64_t)get32(buf)) << 32 | (get32(buf + 4));
+#else
+	return ((uint64_t)get32(buf + 4)) << 32 | (get32(buf));
+#endif
+}
+
+static inline uint64_t
+get64_r(const uint8_t *buf)
+{
+#ifdef GGI_BIG_ENDIAN
+	return ((uint64_t)get32_r(buf + 4)) << 32 | (get32_r(buf));
+#else
+	return ((uint64_t)get32_r(buf)) << 32 | (get32_r(buf + 4));
+#endif
+}
+
+static inline uint64_t
+get64_hilo(const uint8_t *buf)
+{
+#ifdef GGI_BIG_ENDIAN
+	return get64(buf);
+#else
+	return get64_r(buf);
+#endif
+}
+
+static inline uint64_t
+get64_lohi(const uint8_t *buf)
+{
+#ifdef GGI_BIG_ENDIAN
+	return get64_r(buf);
+#else
+	return get64(buf);
+#endif
+}
+#endif /* GG_HAVE_INT64 */
+
 static inline void
 buffer_reverse_16(uint8_t *buf8, uint32_t count)
 {
@@ -199,5 +254,59 @@ buffer_reverse_32(uint8_t *buf8, uint32_t count)
 	for (; count--; ++buf)
 		*buf = GGI_BYTEREV32(*buf);
 }
+
+static inline uint8_t *
+insert16_hilo(uint8_t *dst, uint16_t value)
+{
+	*dst++ = value >> 8;
+	*dst++ = value;
+	return dst;
+}
+
+static inline uint8_t *
+insert32_hilo(uint8_t *dst, uint32_t value)
+{
+	*dst++ = value >> 24;
+	*dst++ = value >> 16;
+	*dst++ = value >> 8;
+	*dst++ = value;
+	return dst;
+}
+
+#ifdef GG_HAVE_INT64
+static inline uint8_t *
+insert64_hilo(uint8_t *dst, uint64_t value)
+{
+	insert32_hilo(dst, value >> 32);
+	return insert32_hilo(dst + 4, value);
+}
+#endif
+
+static inline uint8_t *
+insert16_lohi(uint8_t *dst, uint16_t value)
+{
+	*dst++ = value;
+	*dst++ = value >> 8;
+	return dst;
+}
+
+static inline uint8_t *
+insert32_lohi(uint8_t *dst, uint32_t value)
+{
+	*dst++ = value;
+	*dst++ = value >> 8;
+	*dst++ = value >> 16;
+	*dst++ = value >> 24;
+	return dst;
+}
+
+#ifdef GG_HAVE_INT64
+static inline uint8_t *
+insert64_lohi(uint8_t *dst, uint64_t value)
+{
+	insert32_lohi(dst, value);
+	return insert32_lohi(dst + 4, value >> 32);
+}
+#endif
 
 #endif /* VNC_ENDIAN_H */

@@ -1,11 +1,11 @@
 /*
 ******************************************************************************
 
-   VNC viewer debug output handling.
+   mkstemp replacement for ggivnc.
 
    The MIT License
 
-   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
+   Copyright (C) 2009-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -28,34 +28,50 @@
 ******************************************************************************
 */
 
-#ifndef VNC_DEBUG_H
-#define VNC_DEBUG_H
+#include "config.h"
 
-#include <stdarg.h>
+#include <string.h>
+#ifndef HAVE_IO_H
+#include <io.h>
+#endif
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
 
-extern int ggivnc_debug_level;
+#include "vnc.h"
+#include "vnc-compat.h"
 
-static inline void
-set_debug_level(int level)
+#ifndef HAVE_MKTEMP
+static char *
+mktemp(char *template)
 {
-	ggivnc_debug_level = level;
+	return template;
 }
+#endif /* HAVE_MKTEMP */
 
-static inline int
-get_debug_level(void)
+int
+mkstemp(char *template)
 {
-	return ggivnc_debug_level;
-}
+	int i;
+	int fd = -1;
+	char *tmp = strdup(template);
 
-static inline void
-debug(int level, const char *fmt, ...)
-{
-	va_list args;
-	if (ggivnc_debug_level < level)
-		return;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-}
+	if (!tmp)
+		return -1;
 
-#endif /* VNC_DEBUG_H */
+	for (i = 0; i < 10; ++i) {
+		if (!mktemp(template))
+			break;
+		fd = open(template, O_RDWR | O_CREAT | O_EXCL,
+			S_IREAD | S_IWRITE);
+		if (fd >= 0)
+			break;
+		strcpy(template, tmp);
+	}
+
+	free(tmp);
+	return fd;
+}

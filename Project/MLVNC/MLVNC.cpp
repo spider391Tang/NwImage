@@ -1,16 +1,19 @@
 #include "../ggivnc/config.h"
 #include "MLVNC.h"
 #include <QDebug>
-#include "../ggivnc/MLVNCBuffer.h"
+// #include "../ggivnc/MLVNCBuffer.h"
 #include <stdlib.h>
 #include <boost/lexical_cast.hpp>
+#include <boost/signals2/signal.hpp>
+#include <boost/signals2/connection.hpp>
 
 #define COUNT_OF_ARRAY( arr ) ( sizeof( arr ) / sizeof( arr[0] ) )
+
+typedef boost::signals2::signal <void()> BufferRenderedSignalType;
 
 extern int ggivnc_main( int argc, char *argv[] );
 extern int ggi_main(int argc, char **argv);
 extern void setGgivncTargetFrameBuffer( unsigned char* buf );
-extern void setFlyggiTargetFrameBuffer( unsigned char* buf );
 extern void setGgivncPixFormat( const std::string& pixformat );
 extern void setFlyggiPixFormat( const std::string& pixformat );
 extern void setGgivncRenderStop( bool stop );
@@ -98,7 +101,7 @@ void MLVNC::startRender()
         break;
     }
     ggiDefmode += "]";
-    
+
     setenv( "GGI_DEFMODE", ggiDefmode.c_str() , 1 );
 
     qDebug() << "[MLVNC] startRender: " << ggiDefmode.c_str();
@@ -107,8 +110,9 @@ void MLVNC::startRender()
 
     std::string serverAddr( mHost + "::" + boost::lexical_cast<std::string>( mPort ) );
     char* ggivncArgv[] =
-    { 
+    {
         "ggivnc",
+        "-ddd",
         const_cast<char*>( serverAddr.c_str() )
     };
     ggivnc_main( COUNT_OF_ARRAY( ggivncArgv ) , ggivncArgv );
@@ -169,7 +173,7 @@ void MLVNC::setUpdateFPS( int frame_per_second )
 
 void MLVNC::repaint()
 {
-    
+
 }
 
 void MLVNC::disconnect()
@@ -180,7 +184,6 @@ void MLVNC::disconnect()
 void MLVNC::setFrameBufferPtr( unsigned char* buffer )
 {
     setGgivncTargetFrameBuffer( buffer );
-    setFlyggiTargetFrameBuffer( buffer );
 }
 
 void MLVNC::setColorDepth( MLVNCColorDepth color_depth )

@@ -19,16 +19,23 @@ SOURCES += ../ggivnc/encoding/copyrect.c \
     ../ggivnc/encoding/raw.c \
     ../ggivnc/encoding/rre.c \
     ../ggivnc/encoding/tight.c \
+    ../ggivnc/encoding/trle.c \
     ../ggivnc/encoding/wmvi.c \
     ../ggivnc/encoding/zlib.c \
     ../ggivnc/encoding/zlibhex.c \
     ../ggivnc/encoding/zrle.c \
+    ../ggivnc/security/none.c \
+    ../ggivnc/security/securitytight.c \
+    ../ggivnc/security/vencrypt.c \
+    ../ggivnc/security/vnc-auth.c \
+    ../ggivnc/lib/giiEventPoll.c \
+    ../ggivnc/lib/ggiCrossBlit.c \
     ../ggivnc/bandwidth.c \
     ../ggivnc/conn_none.c \
-    ../ggivnc/d3des.c \
+    ../ggivnc/handshake.c \
+    ../ggivnc/option.c \
     ../ggivnc/pass_getpass.c \
-    ../ggivnc/vnc.cpp \
-    ../ggivnc/flying_ggi.cpp
+    ../ggivnc/vnc.cpp
 
 
 RESOURCES += qml.qrc
@@ -58,7 +65,7 @@ INCLUDEPATH += /opt/local/include
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/libgii.a
 #LIBS += /Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/libggi.a
 
-macx: LIBS += -L/Users/spider391tang/Projects/Mirrorlink-130/ggi-2.2.2-bundle/ggiconf/lib/ -lgg -lgii -lggi -lz
+macx: LIBS += -L/opt/local/lib -lgg -lgii -lggi -lz -lssl -lcrypto
 
 INCLUDEPATH += ../ggivnc/
 INCLUDEPATH += $$PWD/../../../ggi-2.2.2-bundle/ggiconf/lib/

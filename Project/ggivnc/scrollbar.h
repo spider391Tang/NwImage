@@ -3,7 +3,9 @@
 
    VNC viewer scrollbar handling.
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -32,17 +35,17 @@
 
 #ifdef HAVE_WIDGETS
 
-int scrollbar_process(gii_event *event);
-void scrollbar_area(void);
-void scrollbar_create(void);
-void scrollbar_destroy(void);
+int scrollbar_process(struct connection *cx, gii_event *event);
+void scrollbar_area(struct connection *cx);
+void scrollbar_create(struct connection *cx);
+void scrollbar_destroy(struct connection *cx);
 
 #else
 
-#define scrollbar_process(event) 0
-#define scrollbar_area() do; while(0)
-#define scrollbar_create() do; while(0)
-#define scrollbar_destroy() do; while(0)
+#define scrollbar_process(cx, event) 0
+#define scrollbar_area(cx) do; while(0)
+#define scrollbar_create(cx) do; while(0)
+#define scrollbar_destroy(cx) do; while(0)
 
 #endif /* HAVE_WIDGETS */
 

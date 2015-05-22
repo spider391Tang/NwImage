@@ -3,7 +3,9 @@
 
    Get a password from the user using getpass().
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -37,22 +40,25 @@
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
 
 #include "vnc.h"
+#include "vnc-compat.h"
 
 int
-get_password(void)
+get_password(struct connection *cx, const char *uprompt, int ulen,
+	const char *pprompt, int plen)
 {
 	char *password;
 
-    // password = getpass("Password: ");
+	password = strdup(getpass(pprompt ? pprompt : "Password: "));
 
-    //if (!password)
-    //    return -1;
+	if (!password)
+		return -1;
 
-    //g.passwd = password;
-    g.passwd = "0525";
+	cx->passwd = password;
 
 	return 0;
-
 }

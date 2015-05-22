@@ -24,7 +24,7 @@ int main( int argc, char *argv[] )
     VncImageProvider *imageProvider = new VncImageProvider( w, h, 3, QImage::Format_RGB888 );
 
     MLLibrary::MLVNC::getInstance()->init();
-    MLLibrary::MLVNC::getInstance()->connect( "10.128.60.135" );
+    MLLibrary::MLVNC::getInstance()->connect( "10.128.61.206" );
     MLLibrary::MLVNC::getInstance()->setScreenWidth( w );
     MLLibrary::MLVNC::getInstance()->setScreenHeight( h );
     MLLibrary::MLVNC::getInstance()->setFrameBufWidth( w );

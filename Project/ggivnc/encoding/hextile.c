@@ -3,7 +3,9 @@
 
    VNC viewer Hextile encoding.
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -35,7 +38,7 @@
 #include "vnc-endian.h"
 #include "vnc-debug.h"
 
-struct hextile_t {
+struct hextile {
 	uint16_t x;
 	uint16_t y;
 	uint16_t w;
@@ -47,28 +50,29 @@ struct hextile_t {
 	int rects;
 };
 
-static struct hextile_t hextile;
+static int vnc_hextile_8(struct connection *cx);
+static int vnc_hextile_16(struct connection *cx);
+static int vnc_hextile_32(struct connection *cx);
 
-static int vnc_hextile_8(void);
-static int vnc_hextile_16(void);
-static int vnc_hextile_32(void);
-
-static void
-hextile_stem_change(void)
+static int
+hextile_stem_change(struct connection *cx)
 {
-	hextile.stem = g.wire_stem ? g.wire_stem : g.stem;
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
+	hextile->stem = cx->wire_stem ? cx->wire_stem : cx->stem;
+	return 0;
 }
 
 static inline int
-tile_header_complete(int bpp)
+tile_header_complete(struct connection *cx, int bpp)
 {
 	uint8_t subencoding;
 	int extra;
 
-	if (g.input.wpos < g.input.rpos + 1)
+	if (cx->input.wpos < cx->input.rpos + 1)
 		return 0;
 
-	subencoding = g.input.data[g.input.rpos];
+	subencoding = cx->input.data[cx->input.rpos];
 
 	if (subencoding & 1)
 		return 1;
@@ -84,28 +88,29 @@ tile_header_complete(int bpp)
 	if (subencoding & 8)
 		++extra;
 
-	if (g.input.wpos < g.input.rpos + extra)
+	if (cx->input.wpos < cx->input.rpos + extra)
 		return 0;
 
 	return 1;
 }
 
 int
-vnc_hextile_size(int bpp)
+vnc_hextile_size(struct connection *cx, int bpp)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
 	uint8_t subencoding;
 	int header;
 	int subrects;
 	int rect_size;
 
-	if (!tile_header_complete(bpp))
+	if (!tile_header_complete(cx, bpp))
 		return 0;
 
 	header = 0;
-	subencoding = g.input.data[g.input.rpos + header++];
+	subencoding = cx->input.data[cx->input.rpos + header++];
 
 	if (subencoding & 1)
-		return header + bpp * hextile.w * hextile.h;
+		return header + bpp * hextile->w * hextile->h;
 
 	if (subencoding & 2)
 		header += bpp;
@@ -115,7 +120,7 @@ vnc_hextile_size(int bpp)
 
 	rect_size = 2;
 	if (subencoding & 8)
-		subrects = g.input.data[g.input.rpos + header++];
+		subrects = cx->input.data[cx->input.rpos + header++];
 	else
 		subrects = 0;
 
@@ -126,419 +131,469 @@ vnc_hextile_size(int bpp)
 }
 
 static int
-vnc_hextile_done(void)
+vnc_hextile_done(struct connection *cx)
 {
-	--g.rects;
+	--cx->rects;
 
-	remove_dead_data();
-	g.action = vnc_update_rect;
+	remove_dead_data(&cx->input);
+	cx->action = vnc_update_rect;
 	return 1;
 }
 
 static int
-vnc_hextile_next(void)
+vnc_hextile_next(struct connection *cx)
 {
-	hextile.x += 16;
-	if (hextile.x < g.x + g.w) {
-		if (g.x + g.w - hextile.x < 16)
-			hextile.w = g.x + g.w - hextile.x;
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
+	hextile->x += 16;
+	if (hextile->x < cx->x + cx->w) {
+		if (cx->x + cx->w - hextile->x < 16)
+			hextile->w = cx->x + cx->w - hextile->x;
 		else
-			hextile.w = 16;
+			hextile->w = 16;
 		return 1;
 	}
 
-	hextile.x = g.x;
-	if (g.w < 16)
-		hextile.w = g.w;
+	hextile->x = cx->x;
+	if (cx->w < 16)
+		hextile->w = cx->w;
 	else
-		hextile.w = 16;
-	hextile.y += 16;
-	if (hextile.y >= g.y + g.h)
+		hextile->w = 16;
+	hextile->y += 16;
+	if (hextile->y >= cx->y + cx->h)
 		return 0;
-	if (g.y + g.h - hextile.y < 16)
-		hextile.h = g.y + g.h - hextile.y;
+	if (cx->y + cx->h - hextile->y < 16)
+		hextile->h = cx->y + cx->h - hextile->y;
 	else
-		hextile.h = 16;
+		hextile->h = 16;
 	return 1;
 }
 
 static int
-vnc_hextile_raw_8(void)
+vnc_hextile_raw_8(struct connection *cx)
 {
-	int bytes = hextile.w * hextile.h;
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+	int bytes = hextile->w * hextile->h;
 
-	if (g.input.wpos < g.input.rpos + bytes) {
-		g.action = vnc_hextile_raw_8;
+	if (cx->input.wpos < cx->input.rpos + bytes) {
+		cx->action = vnc_hextile_raw_8;
 		return 0;
 	}
 
-	ggiPutBox(hextile.stem, hextile.x, hextile.y, hextile.w, hextile.h,
-		g.input.data + g.input.rpos);
-	g.input.rpos += bytes;
+	ggiPutBox(hextile->stem,
+		hextile->x, hextile->y, hextile->w, hextile->h,
+		cx->input.data + cx->input.rpos);
+	cx->input.rpos += bytes;
 
-	if (g.action == vnc_hextile_raw_8) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_raw_8) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
-	g.action = vnc_hextile_8;
+	cx->action = vnc_hextile_8;
 	return 1;
 }
 
 static int
-vnc_hextile_subrects_8(void)
+vnc_hextile_subrects_8(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
 	int x, y, w, h;
 	ggi_pixel pixel;
 	int size = 2;
 
-	if (hextile.subencoding & 16)
+	if (hextile->subencoding & 16)
 		++size;
 
-	while (hextile.rects) {
-		if (g.input.wpos < g.input.rpos + size) {
-			g.action = vnc_hextile_subrects_8;
+	while (hextile->rects) {
+		if (cx->input.wpos < cx->input.rpos + size) {
+			cx->action = vnc_hextile_subrects_8;
 			return 0;
 		}
 
-		if (hextile.subencoding & 16) {
-			pixel = g.input.data[g.input.rpos++];
-			ggiSetGCForeground(hextile.stem, pixel);
+		if (hextile->subencoding & 16) {
+			pixel = cx->input.data[cx->input.rpos++];
+			ggiSetGCForeground(hextile->stem, pixel);
 		}
 
-		x =  g.input.data[g.input.rpos] >> 4;
-		y =  g.input.data[g.input.rpos++] & 0xf;
-		w = (g.input.data[g.input.rpos] >> 4) + 1;
-		h = (g.input.data[g.input.rpos++] & 0xf) + 1;
+		x =  cx->input.data[cx->input.rpos] >> 4;
+		y =  cx->input.data[cx->input.rpos++] & 0xf;
+		w = (cx->input.data[cx->input.rpos] >> 4) + 1;
+		h = (cx->input.data[cx->input.rpos++] & 0xf) + 1;
 
-		ggiDrawBox(hextile.stem,
-			hextile.x + x, hextile.y + y, w, h);
+		ggiDrawBox(hextile->stem,
+			hextile->x + x, hextile->y + y, w, h);
 
-		--hextile.rects;
+		--hextile->rects;
 	}
 
 	/* Restore fg for coming tiles, does not seem to
 	 * happen for the RealVNC codebase, but it is correct
 	 * to do so, at least the way I read the spec.
 	 */
-	ggiSetGCForeground(hextile.stem, hextile.fg);
+	ggiSetGCForeground(hextile->stem, hextile->fg);
 
-	if (g.action == vnc_hextile_subrects_8) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_subrects_8) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
 
-	g.action = vnc_hextile_8;
+	cx->action = vnc_hextile_8;
 	return 1;
 }
 
 static int
-vnc_hextile_8(void)
+vnc_hextile_8(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
 	do {
-		if (!tile_header_complete(1)) {
-			if (g.action == vnc_hextile)
-				g.action = vnc_hextile_8;
+		if (!tile_header_complete(cx, 1)) {
+			if (cx->action == vnc_hextile)
+				cx->action = vnc_hextile_8;
 			return 0;
 		}
-		hextile.subencoding = g.input.data[g.input.rpos++];
-		if (hextile.subencoding & 1) {
-			if (!vnc_hextile_raw_8())
+		hextile->subencoding = cx->input.data[cx->input.rpos++];
+		if (hextile->subencoding & 1) {
+			if (!vnc_hextile_raw_8(cx))
 				return 0;
 			continue;
 		}
-		if (hextile.subencoding & 2)
-			hextile.bg = g.input.data[g.input.rpos++];
-		ggiSetGCForeground(hextile.stem, hextile.bg);
-		ggiDrawBox(hextile.stem,
-			hextile.x, hextile.y,
-			hextile.w, hextile.h);
-		if (hextile.subencoding & 4)
-			hextile.fg = g.input.data[g.input.rpos++];
-		ggiSetGCForeground(hextile.stem, hextile.fg);
-		if (hextile.subencoding & 8) {
-			hextile.rects = g.input.data[g.input.rpos++];
-			if (!vnc_hextile_subrects_8())
+		if (hextile->subencoding & 2)
+			hextile->bg = cx->input.data[cx->input.rpos++];
+		ggiSetGCForeground(hextile->stem, hextile->bg);
+		ggiDrawBox(hextile->stem,
+			hextile->x, hextile->y,
+			hextile->w, hextile->h);
+		if (hextile->subencoding & 4)
+			hextile->fg = cx->input.data[cx->input.rpos++];
+		ggiSetGCForeground(hextile->stem, hextile->fg);
+		if (hextile->subencoding & 8) {
+			hextile->rects = cx->input.data[cx->input.rpos++];
+			if (!vnc_hextile_subrects_8(cx))
 				return 0;
 			continue;
 		}
-	} while (vnc_hextile_next());
+	} while (vnc_hextile_next(cx));
 
-	vnc_hextile_done();
+	vnc_hextile_done(cx);
 	return 1;
 }
 
 static int
-vnc_hextile_raw_16(void)
+vnc_hextile_raw_16(struct connection *cx)
 {
-	int bytes = 2 * hextile.w * hextile.h;
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+	int bytes = 2 * hextile->w * hextile->h;
 	uint16_t buf[256];
 
-	if (g.input.wpos < g.input.rpos + bytes) {
-		g.action = vnc_hextile_raw_16;
+	if (cx->input.wpos < cx->input.rpos + bytes) {
+		cx->action = vnc_hextile_raw_16;
 		return 0;
 	}
 
-	memcpy(buf, g.input.data + g.input.rpos, bytes);
-	if (g.wire_endian != g.local_endian)
+	memcpy(buf, cx->input.data + cx->input.rpos, bytes);
+	if (cx->wire_endian != cx->local_endian)
 		buffer_reverse_16((uint8_t *)buf, bytes);
-	ggiPutBox(hextile.stem, hextile.x, hextile.y, hextile.w, hextile.h,
-		buf);
-	g.input.rpos += bytes;
+	ggiPutBox(hextile->stem,
+		hextile->x, hextile->y, hextile->w, hextile->h, buf);
+	cx->input.rpos += bytes;
 
-	if (g.action == vnc_hextile_raw_16) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_raw_16) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
-	g.action = vnc_hextile_16;
+	cx->action = vnc_hextile_16;
 	return 1;
 }
 
 static int
-vnc_hextile_subrects_16(void)
+vnc_hextile_subrects_16(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
 	int x, y, w, h;
 	ggi_pixel pixel;
 	int size = 2;
 
-	if (hextile.subencoding & 16)
+	if (hextile->subencoding & 16)
 		size += 2;
 
-	while (hextile.rects) {
-		if (g.input.wpos < g.input.rpos + size) {
-			g.action = vnc_hextile_subrects_16;
+	while (hextile->rects) {
+		if (cx->input.wpos < cx->input.rpos + size) {
+			cx->action = vnc_hextile_subrects_16;
 			return 0;
 		}
 
-		if (hextile.subencoding & 16) {
-			if (g.wire_endian != g.local_endian)
-				pixel = get16_r(&g.input.data[g.input.rpos]);
+		if (hextile->subencoding & 16) {
+			if (cx->wire_endian != cx->local_endian)
+				pixel = get16_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				pixel = get16(&g.input.data[g.input.rpos]);
-			g.input.rpos += 2;
-			ggiSetGCForeground(hextile.stem, pixel);
+				pixel = get16(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 2;
+			ggiSetGCForeground(hextile->stem, pixel);
 		}
 
-		x =  g.input.data[g.input.rpos] >> 4;
-		y =  g.input.data[g.input.rpos++] & 0xf;
-		w = (g.input.data[g.input.rpos] >> 4) + 1;
-		h = (g.input.data[g.input.rpos++] & 0xf) + 1;
+		x =  cx->input.data[cx->input.rpos] >> 4;
+		y =  cx->input.data[cx->input.rpos++] & 0xf;
+		w = (cx->input.data[cx->input.rpos] >> 4) + 1;
+		h = (cx->input.data[cx->input.rpos++] & 0xf) + 1;
 
-		ggiDrawBox(hextile.stem,
-			hextile.x + x, hextile.y + y, w, h);
+		ggiDrawBox(hextile->stem,
+			hextile->x + x, hextile->y + y, w, h);
 
-		--hextile.rects;
+		--hextile->rects;
 	}
 
 	/* Restore fg for coming tiles, does not seem to
 	 * happen for the RealVNC codebase, but it is correct
 	 * to do so, at least the way I read the spec.
 	 */
-	ggiSetGCForeground(hextile.stem, hextile.fg);
+	ggiSetGCForeground(hextile->stem, hextile->fg);
 
-	if (g.action == vnc_hextile_subrects_16) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_subrects_16) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
 
-	g.action = vnc_hextile_16;
+	cx->action = vnc_hextile_16;
 	return 1;
 }
 
 static int
-vnc_hextile_16(void)
+vnc_hextile_16(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
 	do {
-		if (!tile_header_complete(2)) {
-			if (g.action == vnc_hextile)
-				g.action = vnc_hextile_16;
+		if (!tile_header_complete(cx, 2)) {
+			if (cx->action == vnc_hextile)
+				cx->action = vnc_hextile_16;
 			return 0;
 		}
-		hextile.subencoding = g.input.data[g.input.rpos++];
-		if (hextile.subencoding & 1) {
-			if (!vnc_hextile_raw_16())
+		hextile->subencoding = cx->input.data[cx->input.rpos++];
+		if (hextile->subencoding & 1) {
+			if (!vnc_hextile_raw_16(cx))
 				return 0;
 			continue;
 		}
-		if (hextile.subencoding & 2) {
-			if (g.wire_endian != g.local_endian)
-				hextile.bg =
-					get16_r(&g.input.data[g.input.rpos]);
+		if (hextile->subencoding & 2) {
+			if (cx->wire_endian != cx->local_endian)
+				hextile->bg = get16_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				hextile.bg =
-					get16(&g.input.data[g.input.rpos]);
-			g.input.rpos += 2;
+				hextile->bg = get16(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 2;
 		}
-		ggiSetGCForeground(hextile.stem, hextile.bg);
-		ggiDrawBox(hextile.stem,
-			hextile.x, hextile.y,
-			hextile.w, hextile.h);
-		if (hextile.subencoding & 4) {
-			if (g.wire_endian != g.local_endian)
-				hextile.fg =
-					get16_r(&g.input.data[g.input.rpos]);
+		ggiSetGCForeground(hextile->stem, hextile->bg);
+		ggiDrawBox(hextile->stem,
+			hextile->x, hextile->y,
+			hextile->w, hextile->h);
+		if (hextile->subencoding & 4) {
+			if (cx->wire_endian != cx->local_endian)
+				hextile->fg = get16_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				hextile.fg =
-					get16(&g.input.data[g.input.rpos]);
-			g.input.rpos += 2;
+				hextile->fg = get16(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 2;
 		}
-		ggiSetGCForeground(hextile.stem, hextile.fg);
-		if (hextile.subencoding & 8) {
-			hextile.rects = g.input.data[g.input.rpos++];
-			if (!vnc_hextile_subrects_16())
+		ggiSetGCForeground(hextile->stem, hextile->fg);
+		if (hextile->subencoding & 8) {
+			hextile->rects = cx->input.data[cx->input.rpos++];
+			if (!vnc_hextile_subrects_16(cx))
 				return 0;
 			continue;
 		}
-	} while (vnc_hextile_next());
+	} while (vnc_hextile_next(cx));
 
-	vnc_hextile_done();
+	vnc_hextile_done(cx);
 	return 1;
 }
 
 static int
-vnc_hextile_raw_32(void)
+vnc_hextile_raw_32(struct connection *cx)
 {
-	int bytes = 4 * hextile.w * hextile.h;
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+	int bytes = 4 * hextile->w * hextile->h;
 	uint32_t buf[256];
 
-	if (g.input.wpos < g.input.rpos + bytes) {
-		g.action = vnc_hextile_raw_32;
+	if (cx->input.wpos < cx->input.rpos + bytes) {
+		cx->action = vnc_hextile_raw_32;
 		return 0;
 	}
 
-	memcpy(buf, g.input.data + g.input.rpos, bytes);
-	if (g.wire_endian != g.local_endian)
+	memcpy(buf, cx->input.data + cx->input.rpos, bytes);
+	if (cx->wire_endian != cx->local_endian)
 		buffer_reverse_32((uint8_t *)buf, bytes);
-	ggiPutBox(hextile.stem, hextile.x, hextile.y, hextile.w, hextile.h,
-		buf);
-	g.input.rpos += bytes;
+	ggiPutBox(hextile->stem,
+		hextile->x, hextile->y, hextile->w, hextile->h,	buf);
+	cx->input.rpos += bytes;
 
-	if (g.action == vnc_hextile_raw_32) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_raw_32) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
-	g.action = vnc_hextile_32;
+	cx->action = vnc_hextile_32;
 	return 1;
 }
 
 static int
-vnc_hextile_subrects_32(void)
+vnc_hextile_subrects_32(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
 	int x, y, w, h;
 	ggi_pixel pixel;
 	int size = 2;
 
-	if (hextile.subencoding & 16)
+	if (hextile->subencoding & 16)
 		size += 4;
 
-	while (hextile.rects) {
-		if (g.input.wpos < g.input.rpos + size) {
-			g.action = vnc_hextile_subrects_32;
+	while (hextile->rects) {
+		if (cx->input.wpos < cx->input.rpos + size) {
+			cx->action = vnc_hextile_subrects_32;
 			return 0;
 		}
 
-		if (hextile.subencoding & 16) {
-			if (g.wire_endian != g.local_endian)
-				pixel = get32_r(&g.input.data[g.input.rpos]);
+		if (hextile->subencoding & 16) {
+			if (cx->wire_endian != cx->local_endian)
+				pixel = get32_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				pixel = get32(&g.input.data[g.input.rpos]);
-			g.input.rpos += 4;
-			ggiSetGCForeground(hextile.stem, pixel);
+				pixel = get32(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 4;
+			ggiSetGCForeground(hextile->stem, pixel);
 		}
 
-		x =  g.input.data[g.input.rpos] >> 4;
-		y =  g.input.data[g.input.rpos++] & 0xf;
-		w = (g.input.data[g.input.rpos] >> 4) + 1;
-		h = (g.input.data[g.input.rpos++] & 0xf) + 1;
+		x =  cx->input.data[cx->input.rpos] >> 4;
+		y =  cx->input.data[cx->input.rpos++] & 0xf;
+		w = (cx->input.data[cx->input.rpos] >> 4) + 1;
+		h = (cx->input.data[cx->input.rpos++] & 0xf) + 1;
 
-		ggiDrawBox(hextile.stem,
-			hextile.x + x, hextile.y + y, w, h);
+		ggiDrawBox(hextile->stem,
+			hextile->x + x, hextile->y + y, w, h);
 
-		--hextile.rects;
+		--hextile->rects;
 	}
 
 	/* Restore fg for coming tiles, does not seem to
 	 * happen for the RealVNC codebase, but it is correct
 	 * to do so, at least the way I read the spec.
 	 */
-	ggiSetGCForeground(hextile.stem, hextile.fg);
+	ggiSetGCForeground(hextile->stem, hextile->fg);
 
-	if (g.action == vnc_hextile_subrects_32) {
-		if (!vnc_hextile_next())
-			return vnc_hextile_done();
+	if (cx->action == vnc_hextile_subrects_32) {
+		if (!vnc_hextile_next(cx))
+			return vnc_hextile_done(cx);
 	}
 
-	g.action = vnc_hextile_32;
+	cx->action = vnc_hextile_32;
 	return 1;
 }
 
 static int
-vnc_hextile_32(void)
+vnc_hextile_32(struct connection *cx)
 {
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
 	do {
-		if (!tile_header_complete(4)) {
-			if (g.action == vnc_hextile)
-				g.action = vnc_hextile_32;
+		if (!tile_header_complete(cx, 4)) {
+			if (cx->action == vnc_hextile)
+				cx->action = vnc_hextile_32;
 			return 0;
 		}
-		hextile.subencoding = g.input.data[g.input.rpos++];
-		if (hextile.subencoding & 1) {
-			if (!vnc_hextile_raw_32())
+		hextile->subencoding = cx->input.data[cx->input.rpos++];
+		if (hextile->subencoding & 1) {
+			if (!vnc_hextile_raw_32(cx))
 				return 0;
 			continue;
 		}
-		if (hextile.subencoding & 2) {
-			if (g.wire_endian != g.local_endian)
-				hextile.bg =
-					get32_r(&g.input.data[g.input.rpos]);
+		if (hextile->subencoding & 2) {
+			if (cx->wire_endian != cx->local_endian)
+				hextile->bg = get32_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				hextile.bg =
-					get32(&g.input.data[g.input.rpos]);
-			g.input.rpos += 4;
+				hextile->bg = get32(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 4;
 		}
-		ggiSetGCForeground(hextile.stem, hextile.bg);
-		ggiDrawBox(hextile.stem,
-			hextile.x, hextile.y,
-			hextile.w, hextile.h);
-		if (hextile.subencoding & 4) {
-			if (g.wire_endian != g.local_endian)
-				hextile.fg =
-					get32_r(&g.input.data[g.input.rpos]);
+		ggiSetGCForeground(hextile->stem, hextile->bg);
+		ggiDrawBox(hextile->stem,
+			hextile->x, hextile->y,
+			hextile->w, hextile->h);
+		if (hextile->subencoding & 4) {
+			if (cx->wire_endian != cx->local_endian)
+				hextile->fg = get32_r(
+					&cx->input.data[cx->input.rpos]);
 			else
-				hextile.fg =
-					get32(&g.input.data[g.input.rpos]);
-			g.input.rpos += 4;
+				hextile->fg = get32(
+					&cx->input.data[cx->input.rpos]);
+			cx->input.rpos += 4;
 		}
-		ggiSetGCForeground(hextile.stem, hextile.fg);
-		if (hextile.subencoding & 8) {
-			hextile.rects = g.input.data[g.input.rpos++];
-			if (!vnc_hextile_subrects_32())
+		ggiSetGCForeground(hextile->stem, hextile->fg);
+		if (hextile->subencoding & 8) {
+			hextile->rects = cx->input.data[cx->input.rpos++];
+			if (!vnc_hextile_subrects_32(cx))
 				return 0;
 			continue;
 		}
-	} while (vnc_hextile_next());
+	} while (vnc_hextile_next(cx));
 
-	vnc_hextile_done();
+	vnc_hextile_done(cx);
 	return 1;
+}
+
+static int
+hextile_rect(struct connection *cx)
+{
+	struct hextile *hextile = cx->encoding_def[hextile_encoding].priv;
+
+	debug(2, "hextile\n");
+
+	hextile->x = cx->x + cx->w;
+	hextile->y = cx->y - 16;
+	vnc_hextile_next(cx);
+
+	cx->stem_change = hextile_stem_change;
+	cx->stem_change(cx);
+
+	cx->action = vnc_hextile;
+
+	switch (GT_SIZE(cx->wire_mode.graphtype)) {
+	case  8: return vnc_hextile_8(cx);
+	case 16: return vnc_hextile_16(cx);
+	case 32: return vnc_hextile_32(cx);
+	}
+	return 1;
+}
+
+static void
+hextile_end(struct connection *cx)
+{
+	debug(1, "hextile_end\n");
+
+	free(cx->encoding_def[hextile_encoding].priv);
+	cx->encoding_def[hextile_encoding].priv = NULL;
+	cx->encoding_def[hextile_encoding].action = vnc_hextile;
 }
 
 int
-vnc_hextile(void)
+vnc_hextile(struct connection *cx)
 {
-	debug(2, "hextile\n");
+	struct hextile *hextile;
 
-	hextile.x = g.x + g.w;
-	hextile.y = g.y - 16;
-	vnc_hextile_next();
+	debug(1, "hextile init\n");
 
-	g.stem_change = hextile_stem_change;
-	g.stem_change();
+	hextile = malloc(sizeof(*hextile));
+	if (!hextile)
+		return close_connection(cx, -1);
+	memset(hextile, 0, sizeof(*hextile));
 
-	g.action = vnc_hextile;
+	cx->encoding_def[hextile_encoding].priv = hextile;
+	cx->encoding_def[hextile_encoding].end = hextile_end;
 
-	switch (GT_SIZE(g.wire_mode.graphtype)) {
-	case  8: return vnc_hextile_8();
-	case 16: return vnc_hextile_16();
-	case 32: return vnc_hextile_32();
-	}
-	return 1;
+	cx->action = cx->encoding_def[hextile_encoding].action = hextile_rect;
+	return cx->action(cx);
 }

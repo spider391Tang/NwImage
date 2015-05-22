@@ -3,7 +3,9 @@
 
    Present a menu to the user using ggiwidgets.
 
-   Copyright (C) 2007 Peter Rosin  [peda@lysator.liu.se]
+   The MIT License
+
+   Copyright (C) 2007-2010 Peter Rosin  [peda@lysator.liu.se]
 
    Permission is hereby granted, free of charge, to any person obtaining a
    copy of this software and associated documentation files (the "Software"),
@@ -18,9 +20,10 @@
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-   THE AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
 
 ******************************************************************************
 */
@@ -36,99 +39,138 @@
 #include "vnc.h"
 #include "dialog.h"
 
+struct ctx {
+	struct connection *cx;
+	int done;
+};
+
+
 static void
-menu_close_menu(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_close_menu(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 1;
+	ctx->done = 1;
 }
 
 static void
-menu_close(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_close(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 3;
+	ctx->done = 3;
 }
 
 static void
-menu_send_f8(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_send_f8(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 2;
+	ctx->done = 2;
 }
 
 static void
-menu_refresh_screen(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_refresh_screen(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
+	struct connection *cx = ctx->cx;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	vnc_update_request(0);
-	*done = 1;
+	if (vnc_update_request(cx, 0))
+		close_connection(cx, -1);
+	ctx->done = 1;
 }
 
 static void
-menu_ctrl_alt_del(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_ctrl_alt_del(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 5;
+	ctx->done = 5;
 }
 
 static void
-menu_hotkeys(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_hotkeys(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 6;
+	ctx->done = 6;
 }
 
 static void
-menu_paste(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_paste(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 7;
+	ctx->done = 7;
 }
 
 static void
-menu_about(ggi_widget_t widget, ggiWidgetCallbackType cbt)
+menu_file(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
 {
-	int *done = widget->callbackpriv;
+	struct ctx *ctx = widget->callbackpriv;
 
 	if (cbt != GWT_CB_ACTIVATE)
 		return;
 
-	*done = 4;
+	ctx->done = 8;
+}
+
+static void
+menu_xvp(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ctx->done = 9;
+}
+
+static void
+menu_about(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ctx->done = 4;
 }
 
 static ggi_widget_t
 menu_button(const char *text,
-	void (*hook)(struct ggiWidget *self, ggiWidgetCallbackType CBTYPE),
-	void *data)
+	ggiWidgetCallbackFunction hook, void *data)
 {
 	ggi_widget_t label, button;
 
@@ -141,7 +183,7 @@ menu_button(const char *text,
 
 	button = ggiWidgetCreateButton(label);
 	if (!button) {
-		label->destroy(label);
+		ggiWidgetDestroy(label);
 		return NULL;
 	}
 
@@ -167,8 +209,7 @@ menu_button(const char *text,
 
 static ggi_widget_t
 menu_check(const char *text, int check,
-	void (*hook)(struct ggiWidget *self, ggiWidgetCallbackType CBTYPE),
-	void *data)
+	ggiWidgetCallbackFunction hook, void *data)
 {
 	static struct ggiWidgetImage checked = {
 		{ 8, 8 },
@@ -187,7 +228,7 @@ menu_check(const char *text, int check,
 	if (check) {
 		image = ggiWidgetCreateImage(&checked);
 		if (!image) {
-			label->destroy(label);
+			ggiWidgetDestroy(label);
 			return NULL;
 		}
 		image->pad.t = image->pad.l = image->pad.b = image->pad.r = 1;
@@ -195,8 +236,8 @@ menu_check(const char *text, int check,
 
 		content = ggiWidgetCreateContainerLine(0, image, label, NULL);
 		if (!content) {
-			image->destroy(image);
-			label->destroy(label);
+			ggiWidgetDestroy(image);
+			ggiWidgetDestroy(label);
 			return NULL;
 		}
 		content->gravity = GWT_GRAV_WEST;
@@ -208,7 +249,7 @@ menu_check(const char *text, int check,
 
 	button = ggiWidgetCreateButton(content);
 	if (!button) {
-		content->destroy(content);
+		ggiWidgetDestroy(content);
 		return NULL;
 	}
 
@@ -234,68 +275,175 @@ menu_check(const char *text, int check,
 
 #define R "\x03\xff\x01\x01"
 #define B "\x10\x26"
+#define G "\x10\x21"
 
 int
-show_menu(void)
+show_menu(struct connection *cx)
 {
 	ggi_widget_t item;
 	ggi_widget_t menu;
-	int done = 0;
+	struct ctx ctx = { NULL, 0 };
+
+	ctx.cx  = cx;
 
 	menu = ggiWidgetCreateContainerStack(1, NULL);
 	if (!menu)
 		return 1;
 	menu->pad.t = menu->pad.l = menu->pad.b = menu->pad.r = 4;
 
-	item = menu_button("Close menu", menu_close_menu, &done);
+	item = menu_button("Close menu", menu_close_menu, &ctx);
 	if (!item)
 		goto destroy_menu;
-	menu->linkchild(menu, LAST_CHILD, item);
-	item = menu_button(R"C"B"lose " PACKAGE_NAME, menu_close, &done);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button(R "C"B"lose " PACKAGE_NAME, menu_close, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.label = 'C';
-	menu->linkchild(menu, LAST_CHILD, item);
-	item = menu_button("Send "R"F8"B, menu_send_f8, &done);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button("Send "R "F8"B, menu_send_f8, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.sym = GIIK_F8;
-	menu->linkchild(menu, LAST_CHILD, item);
-	item = menu_button(R"R"B"efresh Screen", menu_refresh_screen, &done);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button(R "R"B"efresh Screen", menu_refresh_screen, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.label = 'R';
-	menu->linkchild(menu, LAST_CHILD, item);
-	item = menu_button("Send Ctrl-Alt-Del", menu_ctrl_alt_del, &done);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button("Send Ctrl-Alt-Del", menu_ctrl_alt_del, &ctx);
 	if (!item)
 		goto destroy_menu;
-	menu->linkchild(menu, LAST_CHILD, item);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
 #ifdef GGIWMHFLAG_GRAB_HOTKEYS
-	item = menu_check("Grab "R"H"B"otkeys",
-		ggiWmhGetFlags(g.stem) & GGIWMHFLAG_GRAB_HOTKEYS,
-		menu_hotkeys, &done);
+	item = menu_check("Grab "R "H"B"otkeys",
+		ggiWmhGetFlags(cx->stem) & GGIWMHFLAG_GRAB_HOTKEYS,
+		menu_hotkeys, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.label = 'H';
-	menu->linkchild(menu, LAST_CHILD, item);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
 #endif
 #ifdef GGIWMHFLAG_CLIPBOARD_CHANGE
-	item = menu_button(R"P"B"aste Clipboard", menu_paste, &done);
+	item = menu_button(R "P"B"aste Clipboard", menu_paste, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.label = 'P';
-	menu->linkchild(menu, LAST_CHILD, item);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
 #endif
-	item = menu_button(R"A"B"bout...", menu_about, &done);
+	if (cx->file_transfer) {
+		item = menu_button(R "F"B"ile Transfer...", menu_file, &ctx);
+		if (!item)
+			goto destroy_menu;
+		item->hotkey.label = 'F';
+	}
+	else {
+		item = menu_button(G"File Transfer...", menu_file, &ctx);
+		if (!item)
+			goto destroy_menu;
+		GWT_WIDGET_MAKE_INACTIVE(item);
+	}
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	if (cx->encoding_def[xvp_encoding].priv) {
+		item = menu_button(R "X"B"VP...", menu_xvp, &ctx);
+		if (!item)
+			goto destroy_menu;
+		item->hotkey.label = 'X';
+	}
+	else {
+		item = menu_button(G"XVP...", menu_xvp, &ctx);
+		if (!item)
+			goto destroy_menu;
+		GWT_WIDGET_MAKE_INACTIVE(item);
+	}
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button(R "A"B"bout...", menu_about, &ctx);
 	if (!item)
 		goto destroy_menu;
 	item->hotkey.label = 'A';
-	menu->linkchild(menu, LAST_CHILD, item);
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
 
-	menu = popup_dialog(menu, &done);
+	menu = popup_dialog(cx, menu, &ctx.done, NULL, NULL);
 
 destroy_menu:
-	menu->destroy(menu);
+	ggiWidgetDestroy(menu);
 
-	return done - 1;
+	return ctx.done - 1;
+}
+
+static void
+menu_xvp_shutdown(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ctx->done = 2;
+}
+
+static void
+menu_xvp_reboot(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ctx->done = 3;
+}
+
+static void
+menu_xvp_reset(ggi_widget_t widget, ggiWidgetCallbackType cbt,
+	gii_event *ev, struct ggiWidgetInputStatus *inputstatus)
+{
+	struct ctx *ctx = widget->callbackpriv;
+
+	if (cbt != GWT_CB_ACTIVATE)
+		return;
+
+	ctx->done = 4;
+}
+
+int
+show_xvp_menu(struct connection *cx)
+{
+	ggi_widget_t item;
+	ggi_widget_t menu;
+	struct ctx ctx = { NULL, 0 };
+
+	ctx.cx = cx;
+
+	menu = ggiWidgetCreateContainerStack(1, NULL);
+	if (!menu)
+		return 1;
+	menu->pad.t = menu->pad.l = menu->pad.b = menu->pad.r = 4;
+
+	item = menu_button("Close menu", menu_close_menu, &ctx);
+	if (!item)
+		goto destroy_menu;
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button(R "S"B"hutdown", menu_xvp_shutdown, &ctx);
+	if (!item)
+		goto destroy_menu;
+	item->hotkey.label = 'S';
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button("Re"R "B"B"oot", menu_xvp_reboot, &ctx);
+	if (!item)
+		goto destroy_menu;
+	item->hotkey.label = 'B';
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+	item = menu_button(R "R"B"eset", menu_xvp_reset, &ctx);
+	if (!item)
+		goto destroy_menu;
+	item->hotkey.label = 'R';
+	ggiWidgetLinkChild(menu, GWT_LAST_CHILD, item);
+
+	menu = popup_dialog(cx, menu, &ctx.done, NULL, NULL);
+
+destroy_menu:
+	ggiWidgetDestroy(menu);
+
+	return ctx.done - 1;
 }

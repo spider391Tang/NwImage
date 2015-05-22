@@ -1,7 +1,7 @@
 /*
 ******************************************************************************
 
-   VNC viewer debug output handling.
+   getpass stub for ggivnc.
 
    The MIT License
 
@@ -28,34 +28,16 @@
 ******************************************************************************
 */
 
-#ifndef VNC_DEBUG_H
-#define VNC_DEBUG_H
+#include "config.h"
 
-#include <stdarg.h>
+#include "vnc.h"
+#include "vnc-compat.h"
 
-extern int ggivnc_debug_level;
-
-static inline void
-set_debug_level(int level)
+char *
+getpass(const char *prompt)
 {
-	ggivnc_debug_level = level;
-}
+	fprintf(stderr,
+		"No password entry mechanism, please use the -p option.\n");
 
-static inline int
-get_debug_level(void)
-{
-	return ggivnc_debug_level;
+	return NULL;
 }
-
-static inline void
-debug(int level, const char *fmt, ...)
-{
-	va_list args;
-	if (ggivnc_debug_level < level)
-		return;
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-}
-
-#endif /* VNC_DEBUG_H */
